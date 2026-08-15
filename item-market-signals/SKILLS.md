@@ -96,3 +96,6 @@ If it's a new derived signal (not just a lookup), it needs:
 - Don't add fuzzy/heuristic matching (string similarity, guessed
   normalization) for item names without flagging it clearly in output --
   see the "Known gotchas" section of CONTEXT.md for why.
+
+
+
