@@ -1,0 +1,119 @@
+# CONTEXT.md
+
+Read this before doing anything else in this repo. It's the condensed
+architecture + state doc so you don't need the full chat history that
+produced this project. For conventions and command recipes, see SKILLS.md.
+For the phase-by-phase plan, see ROADMAP.md. For setup/usage, see README.md.
+
+## What this is
+
+An evaluator for a virtual item secondary market (a Roblox game's trading
+economy). Given an item name and optionally an asking price from a seller,
+it returns a real fair-value estimate, a confidence band, a trend if
+history exists, and a plain buy/fair/overpriced verdict.
+
+This is a personal tool AND a data science portfolio project. Both matter:
+code should work correctly (personal use) and be defensible in an interview
+(portfolio use) -- that means honest uncertainty handling matters as much
+as the happy path. See "Design principles" below.
+
+## Data sources
+
+1. **gpovalues.com API** (primary, real prices) -- a public JSON API
+   (`https://gpovalues.com/api/v1/items.json`, no auth) solving item values
+   from ~29,000 observed Discord trades. Returns `value`, `ci_low`,
+   `ci_high`, `confidence` (low/medium/high, purely trade-count driven:
+   <200/200-999/1000+), `demand`, `demand_ratio`, `trade_count`. Full
+   methodology: https://gpovalues.com/legal/methodology.
+2. **Tier/rarity reference JSON** (secondary, structural) -- a hand-curated
+   community tier list (`data/raw/*.json`). No price data. Used only to
+   enrich items with category/rarity/obtainability, and to sanity-check
+   whether the "official" tier ranking still matches what the market
+   actually pays.
+
+There is **no personal trade log**. That was the original design and was
+deliberately dropped -- the user doesn't complete item-for-item trades, he
+buys from sellers, and had no historical log to build one from. Do not
+reintroduce a trade-log-as-primary-data-source design without being asked.
+
+## Architecture
+
+```
+data/raw/*.json              raw tier-list JSON (input to parse_tier_dataset)
+data/snapshots/
+  gpovalues_{date}.csv        dated pulls from the live API
+  tier_reference_{date}.csv   dated parses of the tier JSON
+outputs/
+  feature_matrix_master.csv   the two snapshot types merged
+
+src/config/settings.py        paths, ordinal encodings, API url/UA -- single source of truth
+src/market_signals/
+  ingest/
+    pull_gpovalues_snapshot.py   fetch() [network] + flatten() [pure, testable] + run()
+    parse_tier_dataset.py        flatten nested tier JSON -> tier_reference snapshot
+  features/
+    build_feature_matrix.py      merge latest of each snapshot type, name then alias/shortcut match
+  models/
+    trend_model.py                value delta across snapshot history, gated on 2+ dates
+  evaluator/
+    evaluate.py                   typer CLI, the actual user-facing tool
+  utils/                          reserved, currently empty
+
+scripts/                    thin CLI wrappers around the above, one per pipeline stage
+tests/                      fixtures/ has a real (trimmed) API sample for offline testing
+```
+
+Data flow: `pull_gpovalues_snapshot.py` and `parse_tier_dataset.py` each
+write independent dated snapshots -> `build_feature_matrix.py` merges the
+latest of each -> `trend_model.py` reads snapshot *history* (not just
+latest) for trend -> `evaluate.py` reads the merged matrix plus trend to
+answer one query.
+
+## Current phase
+
+Per ROADMAP.md: repo is built and tested (Phase 0-1 complete). Snapshot
+accumulation (Phase 2) is ongoing and passive -- trend data only gets
+useful with more accumulated dates, not more code.
+
+## Design principles (don't violate these when extending the code)
+
+- **Every uncertainty-bearing calculation has an explicit guard and says so
+  out loud instead of returning a confident-looking wrong answer.**
+  `trend_model.py` refuses to compute a trend under `MIN_SNAPSHOTS`. The
+  evaluator surfaces `confidence == "low"` as a visible caveat, not a
+  footnote. If you add a new model, give it the same kind of guard.
+- **Network fetch and parsing logic are always separated.** See
+  `pull_gpovalues_snapshot.py`: `fetch_items_json()` hits the network,
+  `flatten_items()` is pure and takes a dict. Tests only ever call the pure
+  function, against a fixture, never the network. Keep this split for any
+  new data source.
+- **Unmatched/ambiguous items are flagged, never silently dropped or
+  guessed at.** `build_feature_matrix.py` keeps gpovalues items even
+  without tier enrichment and prints how many. `evaluate.py` lists all
+  candidates and asks the user to be more specific rather than picking one.
+- **Snapshots are always dated and never overwritten.** This is what makes
+  trend analysis possible later. Don't "simplify" this into a single
+  always-current file.
+- **`src`-layout, single root.** Both `config` and `market_signals` live
+  under `src/`. `pip install -e .` makes both importable without manual
+  `sys.path` hacks anywhere except `conftest.py` and the `scripts/*.py`
+  wrappers (which exist specifically so scripts work even without the
+  editable install, e.g. on a fresh clone before `pip install -e .` has run).
+
+## Known gotchas
+
+- `typer` collapses a single-command app: `evaluator/evaluate.py` has only
+  one command, so it's invoked as
+  `python -m market_signals.evaluator.evaluate "Item Name"` -- **no**
+  subcommand name, even though the function is called `check`.
+- gpovalues item names and tier-list item names don't always match exactly
+  (e.g. tier list says "Prestige Candy Cane (+PCC)", API says "Prestige
+  Candy Cane" with `shortcut: "PCC"`). The merge tries exact name, then
+  shortcut-vs-alias, then gives up and flags it -- don't try to make this
+  "smarter" with fuzzy string matching without discussing it first, since
+  silent fuzzy matches on item names are exactly the kind of thing that
+  produces confidently wrong valuations.
+- This project may be run inside network-restricted sandboxes where
+  `gpovalues.com` isn't reachable. If a test or script needs live network
+  and it's unavailable, that's expected in some environments -- use the
+  fixture-based tests to verify logic instead of assuming network access.

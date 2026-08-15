@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+
+# Data -- keep templates, ignore raw pulls and generated snapshots.
+data/raw/*.json
+!data/raw/.gitkeep
+data/snapshots/*.csv
+!data/snapshots/.gitkeep
+
+# Outputs
+outputs/*.csv
+!outputs/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
