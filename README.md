@@ -1,5 +1,0 @@
-ABCDEFG
-
-
-
-ABZ
