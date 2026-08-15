@@ -14,6 +14,8 @@ Each run writes data/snapshots/gpovalues_{date}.csv AND caches the raw JSON
 response under data/raw/ for reproducibility.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import date
 from pathlib import Path

@@ -9,6 +9,8 @@ tracking how an item's tier or demand status moves over time, which is the
 actual "trend" data this project needs.
 """
 
+from __future__ import annotations
+
 import json
 import re
 from datetime import date

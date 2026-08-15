@@ -11,6 +11,8 @@ Note: typer collapses a single-command app, so there's no subcommand name --
 just the item name and options directly.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pandas as pd

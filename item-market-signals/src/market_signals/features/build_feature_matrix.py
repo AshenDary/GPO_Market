@@ -12,6 +12,8 @@ Run ingest/pull_gpovalues_snapshot.py and ingest/parse_tier_dataset.py
 first so both snapshot types exist.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pandas as pd

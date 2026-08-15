@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "item-market-signals"
 version = "0.1.0"
 description = "Virtual item market analysis: reference tier data joined against a personal trade log."
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 
 [tool.setuptools.packages.find]
 where = ["src"]

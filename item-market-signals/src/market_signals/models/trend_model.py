@@ -9,6 +9,8 @@ build up history -- this module gets more useful the longer you let it run,
 not through any extra modeling effort.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pandas as pd
