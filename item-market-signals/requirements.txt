@@ -6,6 +6,9 @@ requests>=2.31
 # CLI for the evaluator
 typer>=0.12
 
+# Dashboard
+streamlit>=1.39
+
 # Plotting (EDA notebook)
 matplotlib>=3.8
 seaborn>=0.13

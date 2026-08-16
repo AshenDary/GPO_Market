@@ -45,6 +45,9 @@ python scripts/run_ingest_gpovalues.py
 python scripts/run_ingest_tier.py
 python scripts/run_feature_build.py
 python -m market_signals.evaluator.evaluate "Prestige Candy Cane"
+# Optional dashboard check:
+streamlit run dashboard/app.py
+# Or double-click run_dashboard.command / run_dashboard.bat
 ```
 
 Note: `run_ingest_gpovalues.py` needs network access to `gpovalues.com`. If

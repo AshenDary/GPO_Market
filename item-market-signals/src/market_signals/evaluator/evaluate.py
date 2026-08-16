@@ -33,27 +33,43 @@ def _load_feature_matrix(path: Path = OUTPUT_DIR / "feature_matrix_master.csv") 
     return pd.read_csv(path)
 
 
-def _find_item(df: pd.DataFrame, name: str) -> pd.Series | None:
+def find_item_matches(df: pd.DataFrame, name: str) -> pd.DataFrame:
+    """Return exact match candidates first, then substring candidates.
+
+    Ambiguous substring matches are returned to the caller rather than
+    resolved here so every interface can surface them honestly.
+    """
     key = name.lower().strip()
     exact = df[df["join_key"] == key]
     if not exact.empty:
-        return exact.iloc[0]
+        return exact.head(1)
 
     # fall back to substring match, e.g. "candy cane" catching "Prestige
     # Candy Cane" too -- surface all matches rather than silently picking one
-    contains = df[df["name"].str.lower().str.contains(key, na=False)]
-    if len(contains) == 1:
-        return contains.iloc[0]
-    if len(contains) > 1:
+    return df[df["name"].str.lower().str.contains(key, na=False, regex=False)]
+
+
+def resolve_item(df: pd.DataFrame, name: str) -> pd.Series | None:
+    matches = find_item_matches(df, name)
+    if len(matches) == 1:
+        return matches.iloc[0]
+    return None
+
+
+def _find_item(df: pd.DataFrame, name: str) -> pd.Series | None:
+    matches = find_item_matches(df, name)
+    if len(matches) == 1:
+        return matches.iloc[0]
+    if len(matches) > 1:
         typer.echo(f"Multiple matches for '{name}':")
-        for _, row in contains.iterrows():
+        for _, row in matches.iterrows():
             typer.echo(f"  - {row['name']}")
         typer.echo("Be more specific.")
         return None
     return None
 
 
-def _verdict(asking_price: float, value: float, ci_low: float, ci_high: float) -> str:
+def verdict(asking_price: float, value: float, ci_low: float, ci_high: float) -> str:
     if asking_price <= ci_low:
         return "GOOD DEAL -- asking price is below the typical trade range"
     if asking_price <= value:
@@ -61,6 +77,10 @@ def _verdict(asking_price: float, value: float, ci_low: float, ci_high: float) -
     if asking_price <= ci_high:
         return "SLIGHTLY HIGH -- still inside the typical range, room to negotiate"
     return "OVERPRICED -- asking price is above the typical trade range"
+
+
+def _verdict(asking_price: float, value: float, ci_low: float, ci_high: float) -> str:
+    return verdict(asking_price, value, ci_low, ci_high)
 
 
 @app.command()

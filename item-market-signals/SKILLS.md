@@ -21,6 +21,9 @@ python scripts/run_ingest_tier.py          # secondary: parse data/raw/*.json
 # merge into one feature matrix
 python scripts/run_feature_build.py
 
+# dashboard
+streamlit run dashboard/app.py
+
 # use it
 python -m market_signals.evaluator.evaluate "Item Name"
 python -m market_signals.evaluator.evaluate "Item Name" --asking-price 300000
@@ -39,11 +42,31 @@ python -m market_signals.models.trend_model
 | User-facing CLI tools | `src/market_signals/evaluator/` |
 | Path constants, encodings, shared config | `src/config/settings.py` (don't create a second config file) |
 | Thin script wrapper for a pipeline stage | `scripts/`, name `run_<stage>.py` |
+| Streamlit dashboard entrypoint and dashboard-only UI helpers | `dashboard/` |
+| GitHub Actions freshness jobs | `.github/workflows/` |
 | Tests | `tests/`, filename `test_<module_under_test>.py` |
 | Offline test fixtures (saved API responses, sample JSON) | `tests/fixtures/` |
 | Raw external data dumps (tier lists, etc.) | `data/raw/` |
-| Generated/dated snapshots | `data/snapshots/`, never committed (gitignored) |
-| Generated merged/final tables | `outputs/`, never committed (gitignored) |
+| Generated/dated snapshots | `data/snapshots/` |
+| Generated merged/final tables | `outputs/` |
+
+Note: snapshot and output CSVs may be committed by the scheduled GitHub
+Actions freshness job so hosted dashboards have data. Raw pulls under
+`data/raw/` stay ignored except for the curated tier input
+`data/raw/gpo_market_dataset.json`, which the workflow needs.
+
+## Streamlit dashboard conventions
+
+- Keep `dashboard/app.py` as presentation glue. If the file grows, split
+  Streamlit-only rendering helpers under `dashboard/components/`.
+- Reuse existing modules from `src/market_signals/*` for feature building,
+  item lookup, verdicts, and trend history. Do not duplicate parsing,
+  matching, or price judgment logic in the dashboard.
+- The Trend tab follows the same `MIN_*` guard pattern as
+  `models/trend_model.py`: if there are fewer than `MIN_SNAPSHOTS`, show a
+  plain message instead of an empty or misleading chart.
+- Prefer Streamlit cache decorators only around data-loading wrappers; keep
+  package modules free of Streamlit imports.
 
 ## Adding a new data source
 
@@ -96,6 +119,3 @@ If it's a new derived signal (not just a lookup), it needs:
 - Don't add fuzzy/heuristic matching (string similarity, guessed
   normalization) for item names without flagging it clearly in output --
   see the "Known gotchas" section of CONTEXT.md for why.
-
-
-
