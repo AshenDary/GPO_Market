@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
 
 from dashboard.components.data import load_feature_matrix, load_history
 from dashboard.components.views import render_lookup, render_overview, render_trend
@@ -33,4 +40,3 @@ with lookup_tab:
 
 with trend_tab:
     render_trend(feature_matrix, snapshot_history)
-

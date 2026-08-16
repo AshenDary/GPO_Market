@@ -33,7 +33,7 @@ as the happy path. See "Design principles" below.
 
 There is **no personal trade log**. That was the original design and was
 deliberately dropped -- the user doesn't complete item-for-item trades, he
-buys from sellers, and had no historical log to build one from. Do not
+buys from sellers, and had no  historical log to build one from. Do not
 reintroduce a trade-log-as-primary-data-source design without being asked.
 
 ## Architecture
