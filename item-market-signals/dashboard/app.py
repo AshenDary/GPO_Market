@@ -16,6 +16,11 @@ from dashboard.components.views import render_lookup, render_overview, render_tr
 
 
 st.set_page_config(page_title="Item Market Signals", layout="wide")
+
+if st.sidebar.button("Refresh data"):
+    st.cache_data.clear()
+    st.rerun()
+
 st.title("Item Market Signals")
 st.caption("Live evaluator for fair values, confidence, tier context, and snapshot trends.")
 
