@@ -1,29 +1,27 @@
 # Item Market Signals
 
-A command-line evaluator for a virtual item trading market. Given an item
-name, it pulls together real community price data, tier-list context, demand,
-confidence bands, and snapshot history to answer a simple question:
+An item-market valuation project for the Grand Piece Online trading economy.
+It ingests live community pricing, enriches rows with tier/rarity context,
+tracks dated snapshots, and returns practical valuation signals through both
+a CLI evaluator and a Streamlit dashboard.
 
-**Is this item fairly priced, undervalued, or overpriced?**
-
-This project is built around the Grand Piece Online secondary market, but the
-architecture is meant to demonstrate a broader data workflow: ingest live
-market data, enrich it with reference data, build a feature matrix, and expose
-the result through a small evaluator.
+The active project code lives in the `item-market-signals/` folder.
 
 ## What It Shows
 
 - Live market-data ingestion from the public gpovalues.com API
 - Offline parsing of a curated tier/rarity JSON dataset
-- Snapshot-based data storage for future trend tracking
+- Snapshot-based data storage for trend tracking over time
 - Feature merging by exact item name, then shortcut/alias fallback
 - Explicit uncertainty handling through confidence labels and value ranges
 - A user-facing CLI that returns a practical buy/fair/overpriced signal
+- A Streamlit dashboard with overview, lookup, and trend tabs
 - Offline tests using saved fixtures instead of live network calls
 
 ## Example
 
 ```bash
+cd item-market-signals
 python -m market_signals.evaluator.evaluate "Prestige Candy Cane"
 ```
 
@@ -63,6 +61,7 @@ Trend analysis becomes more useful as more snapshots accumulate over time.
 ## Quick Start
 
 ```bash
+cd item-market-signals
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -78,6 +77,15 @@ python scripts/run_feature_build.py
 python -m market_signals.evaluator.evaluate "Prestige Candy Cane"
 ```
 
+Run the dashboard:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Use the sidebar `Refresh data` button after running ingestion scripts so
+cached data is reloaded immediately.
+
 Run tests:
 
 ```bash
@@ -90,26 +98,23 @@ but parser and transformation logic are tested against saved fixtures.
 ## Project Structure
 
 ```text
-src/market_signals/
-  ingest/       # live API pulls and tier JSON parsing
-  features/     # snapshot merging and feature matrix creation
-  models/       # derived signals such as trend
-  evaluator/    # user-facing CLI
-
-data/
-  raw/          # raw source data
-  snapshots/    # dated CSV snapshots
-
-outputs/        # generated feature matrices
-tests/          # offline unit tests and fixtures
-scripts/        # thin pipeline runners
+item-market-signals/
+  dashboard/    # Streamlit app + dashboard components
+  src/          # package code (ingest, features, models, evaluator)
+  data/
+    raw/        # curated tier source + temporary raw pulls
+    snapshots/  # dated gpovalues and tier CSV snapshots
+  outputs/      # generated merged feature matrix files
+  scripts/      # thin pipeline runners
+  tests/        # offline unit tests and fixtures
 ```
 
 ## Current Status
 
-The core ingestion, feature-building, and evaluator flow is working. Trend
-signals are intentionally guarded until multiple snapshot dates exist, so the
-tool avoids pretending that one data point is a real trend.
+The ingestion, feature-building, evaluator, and dashboard flows are all
+working on `main`. Trend signals remain guarded by a minimum snapshot count,
+and this repository currently has multiple snapshot dates, so trend output is
+available for items with sufficient history.
 
 ## Tech Stack
 

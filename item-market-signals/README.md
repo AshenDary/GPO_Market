@@ -5,6 +5,12 @@ updated community-solved item values from a public API, enriches them with
 structural tier/rarity data, tracks value trend over time, and tells you
 whether a given asking price is a good deal.
 
+The project exposes two user-facing interfaces:
+
+- CLI evaluator (`market_signals.evaluator.evaluate`)
+- Streamlit dashboard (`dashboard/app.py`) with Overview, Item lookup, and
+   Trend tabs
+
 See `ROADMAP.md` for the phase-by-phase plan this repo is built around.
 
 ## Data sources
@@ -61,6 +67,16 @@ fixture, not the live network):
 pytest
 ```
 
+Run the dashboard:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Dashboard data loaders use a 1-hour cache. Use the sidebar `Refresh data`
+button after running ingest/build scripts if you want the UI to pick up the
+latest snapshots immediately.
+
 ### Building snapshot history
 
 The trend feature needs multiple dated snapshots. Run
@@ -69,6 +85,10 @@ The trend feature needs multiple dated snapshots. Run
 ```
 0 9 * * * cd /path/to/item-market-signals && .venv/bin/python scripts/run_ingest_gpovalues.py
 ```
+
+Trend is currently available at the project level because multiple dated
+snapshots already exist. Individual items still require at least two
+observations to show a trend line.
 
 ## File structure
 
@@ -79,8 +99,8 @@ item-market-signals/
 ├── requirements.txt
 ├── .gitignore, .env.example, pyproject.toml, conftest.py
 ├── data/
-│   ├── raw/                         # cached raw JSON pulls (gitignored)
-│   └── snapshots/                    # dated gpovalues_*.csv + tier_reference_*.csv (gitignored)
+│   ├── raw/                         # curated tier dataset + optional raw pulls
+│   └── snapshots/                   # dated gpovalues_*.csv + tier_reference_*.csv
 ├── src/
 │   ├── config/
 │   │   └── settings.py              # paths, ordinal encodings, API url -- single source of truth
@@ -104,7 +124,7 @@ item-market-signals/
 │   ├── fixtures/sample_gpovalues_response.json   # real (trimmed) API sample, offline testing
 │   ├── test_pull_gpovalues_snapshot.py
 │   └── test_parse_tier_dataset.py
-└── outputs/                          # feature_matrix_master.csv, gitignored
+└── outputs/                         # feature_matrix_master.csv and helpers
 ```
 
 ## Architecture
