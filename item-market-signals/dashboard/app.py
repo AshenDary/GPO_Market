@@ -1,4 +1,4 @@
-"""Streamlit dashboard for exploring the current item market snapshots."""
+"""Streamlit dashboard router with shared frame and top navigation."""
 
 from __future__ import annotations
 
@@ -12,17 +12,19 @@ _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
-from dashboard.components.data import load_feature_matrix, load_history
 from dashboard.components.styling import apply_dashboard_style
-from dashboard.components.views import render_lookup, render_overview, render_trend
+
+
+NAV_PAGES = [
+    st.Page("pages/overview.py", title="Overview", icon=":material/dashboard:", default=True),
+    st.Page("pages/lookup.py", title="Item lookup", icon=":material/search:"),
+    st.Page("pages/trend.py", title="Trend", icon=":material/show_chart:"),
+    st.Page("pages/guide.py", title="How it works", icon=":material/info:"),
+]
 
 
 st.set_page_config(page_title="Item Market Signals", layout="wide")
 apply_dashboard_style()
-
-if st.sidebar.button("Refresh data"):
-    st.cache_data.clear()
-    st.rerun()
 
 st.markdown(
     dedent(
@@ -40,24 +42,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-try:
-    feature_matrix = load_feature_matrix()
-except FileNotFoundError as exc:
-    st.error(str(exc))
-    st.stop()
+refresh_col, _ = st.columns([0.25, 0.75])
+with refresh_col:
+    if st.button("Refresh data"):
+        st.cache_data.clear()
+        st.rerun()
 
-try:
-    snapshot_history = load_history()
-except FileNotFoundError:
-    snapshot_history = None
-
-overview_tab, lookup_tab, trend_tab = st.tabs(["Overview", "Item lookup", "Trend"])
-
-with overview_tab:
-    render_overview(feature_matrix)
-
-with lookup_tab:
-    render_lookup(feature_matrix)
-
-with trend_tab:
-    render_trend(feature_matrix, snapshot_history)
+page = st.navigation(NAV_PAGES, position="top")
+page.run()
