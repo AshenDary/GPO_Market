@@ -23,3 +23,5 @@ data/raw/*.json
 # OS / editor
 .DS_Store
 .vscode/
+
+Project_notes.txt
