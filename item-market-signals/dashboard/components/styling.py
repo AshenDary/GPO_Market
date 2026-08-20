@@ -34,9 +34,30 @@ def apply_dashboard_style() -> None:
         }
 
         #MainMenu,
-        footer,
-        header[data-testid="stHeader"] {
+        footer {
             display: none;
+        }
+
+        [data-testid="stHeader"] {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+        }
+
+        [data-testid="stTopNavSection"] {
+            border-bottom: 1px solid var(--border);
+        }
+
+        [data-testid="stTopNavLinkContainer"] a {
+            color: var(--muted);
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-weight: 600;
+        }
+
+        [data-testid="stTopNavLinkContainer"] a[aria-current="page"] {
+            color: var(--ink);
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 0.35rem;
         }
 
         [data-testid="stAppViewBlockContainer"] {
