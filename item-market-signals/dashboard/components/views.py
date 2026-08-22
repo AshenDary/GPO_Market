@@ -412,18 +412,16 @@ def render_trend(df: pd.DataFrame, history: pd.DataFrame | None) -> None:
         },
         margin={"l": 20, "r": 20, "t": 48, "b": 20},
         xaxis={
-            "title": "Snapshot date",
+            "title": {"text": "Snapshot date", "font": {"color": PALETTE["muted"]}},
             "gridcolor": PALETTE["border"],
             "linecolor": PALETTE["border"],
             "tickfont": {"color": PALETTE["muted"]},
-            "titlefont": {"color": PALETTE["muted"]},
         },
         yaxis={
-            "title": "Solved value",
+            "title": {"text": "Solved value", "font": {"color": PALETTE["muted"]}},
             "gridcolor": PALETTE["border"],
             "linecolor": PALETTE["border"],
             "tickfont": {"color": PALETTE["muted"]},
-            "titlefont": {"color": PALETTE["muted"]},
             "tickformat": ",.0f",
         },
     )
