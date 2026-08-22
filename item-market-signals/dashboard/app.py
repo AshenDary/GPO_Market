@@ -27,7 +27,7 @@ NAV_PAGES = [
 REPO_URL = "https://github.com/AshenDary/GPO_Market.git"
 
 
-st.set_page_config(page_title="Item Market Signals", layout="wide")
+st.set_page_config(page_title="GPO Item Market Signals", page_icon="📈", layout="wide")
 apply_dashboard_style()
 
 st.markdown(

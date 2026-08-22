@@ -28,7 +28,7 @@ from config.settings import GPOVALUES_API_URL, GPOVALUES_USER_AGENT, RAW_DIR, SN
 ITEM_COLUMNS = [
     "slug", "name", "shortcut", "value", "ci_low", "ci_high",
     "confidence", "rarity", "tier", "demand", "demand_ratio",
-    "trade_count", "derivation", "share_url",
+    "trade_count", "derivation", "share_url", "image_url",
 ]
 
 

@@ -10,8 +10,10 @@ from html import escape
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
+from dashboard.components.layout import render_metric_cards
 from market_signals.evaluator.evaluate import find_item_matches, resolve_item, verdict
 from market_signals.models.trend_model import MIN_SNAPSHOTS, compute_trend
 
@@ -48,15 +50,6 @@ def _number_span(value: float | int | None) -> str:
     return f'<span class="num">{escape(_format_value(value))}</span>'
 
 
-def _render_metric_grid(metrics: list[tuple[str, str]]) -> None:
-    cards = "".join(
-        f'<div class="metric-card"><div class="metric-label">{escape(label)}</div>'
-        f'<div class="metric-value">{escape(value)}</div></div>'
-        for label, value in metrics
-    )
-    st.markdown(f'<div class="metric-grid">{cards}</div>', unsafe_allow_html=True)
-
-
 def _render_price_grid(row: pd.Series) -> None:
     cards = "".join(
         f'<div class="price-card"><div class="price-label">{escape(label)}</div>'
@@ -83,6 +76,36 @@ def _verdict_marker(verdict_text: str) -> str:
     if "overpriced" in normalized:
         return "▼"
     return "◆"
+
+
+def _image_html(image_url: object) -> str:
+    if isinstance(image_url, str) and image_url.startswith(("http://", "https://")):
+        return f'<img src="{escape(image_url, quote=True)}" alt="">'
+    return '<span class="item-image-placeholder">NO IMAGE</span>'
+
+
+def _render_verdict_panel(row: pd.Series, asking_price: float) -> None:
+    low = _as_float(row["ci_low"])
+    high = _as_float(row["ci_high"])
+    value = _as_float(row["value"])
+
+    if asking_price <= 0 or low is None or high is None or value is None:
+        title = "Enter an asking price for a buy/fair/overpriced verdict"
+        kicker = "Verdict"
+    else:
+        verdict_text = verdict(asking_price, value, low, high)
+        title = verdict_text
+        kicker = f"Asking {_format_value(asking_price)}"
+
+    st.markdown(
+        (
+            '<div class="verdict-panel">'
+            f'<div class="verdict-kicker">{escape(kicker)}</div>'
+            f'<div class="verdict-title">{escape(title)}</div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _render_confidence_band(row: pd.Series, asking_price: float = 0.0) -> None:
@@ -182,7 +205,7 @@ def render_overview(df: pd.DataFrame) -> None:
 
     enriched = int(df["has_tier_enrichment"].fillna(False).sum())
     missing = int((~df["has_tier_enrichment"].fillna(False)).sum())
-    _render_metric_grid(
+    render_metric_cards(
         [
             ("With tier enrichment", f"{enriched:,}"),
             ("Without tier enrichment", f"{missing:,}"),
@@ -223,52 +246,86 @@ def render_lookup(df: pd.DataFrame) -> None:
     _section_title("Item Lookup")
 
     names = sorted(df["name"].dropna().unique())
-    query = st.text_input("Search by item name")
-    selected = st.selectbox("Or select an item", names, index=0)
+
+    quick_picks = (
+        df.dropna(subset=["trade_count"])
+        .sort_values("trade_count", ascending=False)
+        .head(5)["name"]
+        .tolist()
+    )
+    st.markdown('<div class="quick-picks">', unsafe_allow_html=True)
+    quick_cols = st.columns(len(quick_picks)) if quick_picks else []
+    for idx, item_name in enumerate(quick_picks):
+        with quick_cols[idx]:
+            if st.button(str(item_name), key=f"quick_pick_{idx}"):
+                st.session_state["lookup_item"] = item_name
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if "lookup_item" not in st.session_state and names:
+        st.session_state["lookup_item"] = names[0]
+
+    selected = st.selectbox("Item", names, key="lookup_item")
     asking_price = st.number_input("Asking price", min_value=0.0, step=1000.0, value=0.0)
 
-    lookup_name = query.strip() or selected
-    if query.strip():
-        matches = find_item_matches(df, lookup_name)
-        if len(matches) > 1:
-            _notice(f"Multiple matches for '{lookup_name}'. Be more specific.")
-            st.dataframe(matches[["name", "shortcut", "value", "confidence"]], hide_index=True)
-            return
-        if matches.empty:
-            _notice(f"No match found for '{lookup_name}'.")
-            return
-
-    row = resolve_item(df, lookup_name)
+    row = resolve_item(df, selected)
     if row is None:
-        _notice(f"No match found for '{lookup_name}'.")
+        _notice(f"No match found for '{selected}'.")
         return
 
     shortcut = "" if pd.isna(row.get("shortcut", "")) else row.get("shortcut", "")
     trade_count = int(row["trade_count"]) if not pd.isna(row["trade_count"]) else 0
     st.markdown(
         (
-            f'<div class="item-panel"><h3 class="item-title">{escape(str(row["name"]))}</h3>'
-            f'<p class="item-meta">{escape(str(shortcut))} / Confidence '
-            f'<span class="num">{escape(str(row["confidence"]))}</span> / '
+            '<div class="lookup-hero">'
+            f'<div class="item-image-frame">{_image_html(row.get("image_url"))}</div>'
+            '<div>'
+            f'<h3 class="item-title">{escape(str(row["name"]))}</h3>'
+            f'<p class="item-meta">{escape(str(shortcut))}</p>'
+            f'<p class="item-meta">Confidence <span class="num">{escape(str(row["confidence"]))}</span> / '
             f'<span class="num">{trade_count:,}</span> trades observed</p>'
-            f'<p class="item-meta">Demand: {escape(str(row.get("demand", "unknown")))}</p></div>'
+            f'<p class="item-meta">Demand: {escape(str(row.get("demand", "unknown")))}</p>'
+            '</div></div>'
         ),
         unsafe_allow_html=True,
     )
 
-    _render_price_grid(row)
+    _render_verdict_panel(row, asking_price)
+    render_metric_cards(
+        [
+            ("Solved value", _format_value(row["value"])),
+            ("Typical low", _format_value(row["ci_low"])),
+            ("Typical high", _format_value(row["ci_high"])),
+            ("Confidence", str(row["confidence"])),
+            ("Demand", str(row.get("demand", "unknown"))),
+            ("Trades observed", f"{trade_count:,}"),
+        ],
+        class_name="metric-grid--three",
+    )
     _render_confidence_band(row, asking_price)
     if row["confidence"] == "low":
         _notice("Low-confidence item: treat this value as directional, not exact.")
+
+
+def _badge_style(_: object) -> str:
+    return (
+        "background-color: #161616; "
+        "border: 1px solid #8C8C8C; "
+        "border-radius: 999px; "
+        "color: #F2F2F0; "
+        "font-weight: 600; "
+        "text-align: center;"
+    )
 
 
 def render_value_list(df: pd.DataFrame) -> None:
     _section_title("Value List")
 
     tier_col = "tier_tier" if "tier_tier" in df.columns else "tier"
-    table_cols = ["name", tier_col, "value", "confidence", "demand", "trade_count"]
+    table_cols = ["image_url", "name", tier_col, "value", "confidence", "demand", "trade_count"]
     table_df = df[table_cols].copy()
     table_df = table_df.rename(columns={tier_col: "tier"})
+    table_df["value"] = pd.to_numeric(table_df["value"], errors="coerce").round().astype("Int64")
+    table_df["trade_count"] = pd.to_numeric(table_df["trade_count"], errors="coerce").astype("Int64")
 
     query = st.text_input("Search by item name", key="value_list_search")
     if query.strip():
@@ -277,18 +334,22 @@ def render_value_list(df: pd.DataFrame) -> None:
         ]
 
     table_df = table_df.sort_values("value", ascending=False, na_position="last")
+    styled_table = table_df.style.map(_badge_style, subset=["tier", "confidence", "demand"])
     st.dataframe(
-        table_df,
+        styled_table,
         hide_index=True,
         use_container_width=True,
         height=620,
+        row_height=72,
+        column_order=["image_url", "name", "tier", "value", "confidence", "demand", "trade_count"],
         column_config={
+            "image_url": st.column_config.ImageColumn("Item", width="medium"),
             "name": st.column_config.TextColumn("Name", width="large"),
             "tier": st.column_config.TextColumn("Tier"),
-            "value": st.column_config.NumberColumn("Value", format="%d"),
+            "value": st.column_config.NumberColumn("Value", format="localized"),
             "confidence": st.column_config.TextColumn("Confidence"),
             "demand": st.column_config.TextColumn("Demand"),
-            "trade_count": st.column_config.NumberColumn("Trade count", format="%d"),
+            "trade_count": st.column_config.NumberColumn("Trade count", format="localized"),
         },
     )
 
@@ -320,21 +381,53 @@ def render_trend(df: pd.DataFrame, history: pd.DataFrame | None) -> None:
         _notice(f"Not enough snapshot history yet for {row['name']}.")
         return
 
-    fig, ax = plt.subplots(figsize=(9, 4.6), facecolor=PALETTE["bg"])
-    ax.plot(
-        item_history["snapshot_date"],
-        item_history["value"],
-        color=PALETTE["ink"],
-        linewidth=2,
-        marker="D",
-        markerfacecolor=PALETTE["surface"],
-        markeredgecolor=PALETTE["ink"],
+    item_history = item_history.assign(snapshot_date=pd.to_datetime(item_history["snapshot_date"]))
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=item_history["snapshot_date"],
+                y=item_history["value"],
+                mode="lines+markers",
+                line={"color": PALETTE["ink"], "width": 2},
+                marker={
+                    "symbol": "diamond",
+                    "size": 9,
+                    "color": PALETTE["surface"],
+                    "line": {"color": PALETTE["ink"], "width": 1},
+                },
+                customdata=item_history["snapshot_date"].dt.strftime("%Y-%m-%d"),
+                hovertemplate="Date: %{customdata}<br>Value: %{y:,.0f}<extra></extra>",
+            )
+        ]
     )
-    ax.set_xlabel("Snapshot date")
-    ax.set_ylabel("Solved value")
-    ax.set_title(str(row["name"]))
-    _style_axis(ax)
-    st.pyplot(fig, clear_figure=True)
+    fig.update_layout(
+        title=str(row["name"]),
+        paper_bgcolor=PALETTE["bg"],
+        plot_bgcolor=PALETTE["bg"],
+        font={"color": PALETTE["muted"], "family": "IBM Plex Sans"},
+        hoverlabel={
+            "bgcolor": PALETTE["surface"],
+            "bordercolor": PALETTE["border"],
+            "font_color": PALETTE["ink"],
+        },
+        margin={"l": 20, "r": 20, "t": 48, "b": 20},
+        xaxis={
+            "title": "Snapshot date",
+            "gridcolor": PALETTE["border"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+            "titlefont": {"color": PALETTE["muted"]},
+        },
+        yaxis={
+            "title": "Solved value",
+            "gridcolor": PALETTE["border"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+            "titlefont": {"color": PALETTE["muted"]},
+            "tickformat": ",.0f",
+        },
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.markdown(
         (
             '<div class="notice">Trend: '

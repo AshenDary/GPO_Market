@@ -38,6 +38,16 @@ def render_refresh_button(key: str) -> None:
             st.rerun()
 
 
+def render_metric_cards(metrics: list[tuple[str, str]], class_name: str = "metric-grid") -> None:
+    """Render reusable metric cards without Streamlit's default metric colors."""
+    cards = "".join(
+        f'<div class="metric-card"><div class="metric-label">{escape(label)}</div>'
+        f'<div class="metric-value">{escape(value)}</div></div>'
+        for label, value in metrics
+    )
+    st.markdown(f'<div class="{escape(class_name, quote=True)}">{cards}</div>', unsafe_allow_html=True)
+
+
 def render_footer(repo_url: str) -> None:
     """Render muted project/resource credits below each routed page."""
     links = " / ".join(

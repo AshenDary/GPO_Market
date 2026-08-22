@@ -8,6 +8,7 @@ typer>=0.12
 
 # Dashboard
 streamlit>=1.39
+plotly>=5.22
 
 # Plotting (EDA notebook)
 matplotlib>=3.8
