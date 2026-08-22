@@ -19,7 +19,7 @@ jupyter>=1.0
 # Testing
 pytest>=8.0
 
-# --- Add later, not needed for Phase 1-3 ---
+
 # scikit-learn        # once you're regressing structural features against
 #                        gpovalues values for low-confidence items (Phase 4)
 # statsmodels          # proper time-series trend modeling once you have
