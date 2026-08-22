@@ -262,6 +262,37 @@ def render_lookup(df: pd.DataFrame) -> None:
         _notice("Low-confidence item: treat this value as directional, not exact.")
 
 
+def render_value_list(df: pd.DataFrame) -> None:
+    _section_title("Value List")
+
+    tier_col = "tier_tier" if "tier_tier" in df.columns else "tier"
+    table_cols = ["name", tier_col, "value", "confidence", "demand", "trade_count"]
+    table_df = df[table_cols].copy()
+    table_df = table_df.rename(columns={tier_col: "tier"})
+
+    query = st.text_input("Search by item name", key="value_list_search")
+    if query.strip():
+        table_df = table_df[
+            table_df["name"].fillna("").str.contains(query.strip(), case=False, regex=False)
+        ]
+
+    table_df = table_df.sort_values("value", ascending=False, na_position="last")
+    st.dataframe(
+        table_df,
+        hide_index=True,
+        use_container_width=True,
+        height=620,
+        column_config={
+            "name": st.column_config.TextColumn("Name", width="large"),
+            "tier": st.column_config.TextColumn("Tier"),
+            "value": st.column_config.NumberColumn("Value", format="%d"),
+            "confidence": st.column_config.TextColumn("Confidence"),
+            "demand": st.column_config.TextColumn("Demand"),
+            "trade_count": st.column_config.NumberColumn("Trade count", format="%d"),
+        },
+    )
+
+
 def render_trend(df: pd.DataFrame, history: pd.DataFrame | None) -> None:
     _section_title("Trend")
 

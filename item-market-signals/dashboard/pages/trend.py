@@ -5,8 +5,11 @@ from __future__ import annotations
 import streamlit as st
 
 from dashboard.components.data import load_feature_matrix, load_history
+from dashboard.components.layout import render_refresh_button
 from dashboard.components.views import render_trend
 
+
+render_refresh_button("refresh_trend")
 
 try:
     feature_matrix = load_feature_matrix()

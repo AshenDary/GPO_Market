@@ -224,6 +224,30 @@ def apply_dashboard_style() -> None:
             padding: 0.9rem 1rem;
         }
 
+        .app-footer {
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.6;
+            margin-top: 2.25rem;
+            padding-top: 1rem;
+        }
+
+        .app-footer a,
+        .app-footer span {
+            color: var(--muted);
+        }
+
+        .app-footer a {
+            text-decoration-color: var(--border);
+            text-underline-offset: 0.2rem;
+        }
+
+        .app-footer a:hover {
+            color: var(--ink);
+            text-decoration-color: var(--ink);
+        }
+
         .bar-row {
             display: grid;
             grid-template-columns: minmax(96px, 150px) 1fr minmax(54px, auto);
