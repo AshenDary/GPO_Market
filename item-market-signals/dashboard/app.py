@@ -13,17 +13,21 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
 from dashboard.components.styling import apply_dashboard_style
+from dashboard.components.layout import render_footer
 
 
 NAV_PAGES = [
     st.Page("pages/overview.py", title="Overview", icon=":material/dashboard:", default=True),
     st.Page("pages/lookup.py", title="Item lookup", icon=":material/search:"),
     st.Page("pages/trend.py", title="Trend", icon=":material/show_chart:"),
+    st.Page("pages/value_list.py", title="Value List", icon=":material/table:"),
     st.Page("pages/guide.py", title="How it works", icon=":material/info:"),
 ]
 
+REPO_URL = "https://github.com/AshenDary/GPO_Market.git"
 
-st.set_page_config(page_title="Item Market Signals", layout="wide")
+
+st.set_page_config(page_title="GPO Item Market Signals", page_icon="📈", layout="wide")
 apply_dashboard_style()
 
 st.markdown(
@@ -42,11 +46,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-refresh_col, _ = st.columns([0.25, 0.75])
-with refresh_col:
-    if st.button("Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
-
 page = st.navigation(NAV_PAGES, position="top")
 page.run()
+render_footer(REPO_URL)

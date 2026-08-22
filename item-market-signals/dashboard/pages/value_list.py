@@ -1,4 +1,4 @@
-"""Item lookup dashboard page."""
+"""Full item value catalog dashboard page."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import streamlit as st
 
 from dashboard.components.data import load_feature_matrix
 from dashboard.components.layout import render_refresh_button
-from dashboard.components.views import render_lookup
+from dashboard.components.views import render_value_list
 
 
-render_refresh_button("refresh_lookup")
+render_refresh_button("refresh_value_list")
 
 try:
     feature_matrix = load_feature_matrix()
@@ -17,4 +17,4 @@ except FileNotFoundError as exc:
     st.error(str(exc))
     st.stop()
 
-render_lookup(feature_matrix)
+render_value_list(feature_matrix)

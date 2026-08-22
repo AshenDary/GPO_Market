@@ -99,6 +99,22 @@ def apply_dashboard_style() -> None:
             color: var(--muted);
         }
 
+        div[data-testid="stAlert"] {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--ink);
+            color: var(--ink);
+        }
+
+        div[data-testid="stAlert"] * {
+            color: var(--ink);
+        }
+
+        div[data-testid="stAlert"] svg {
+            color: var(--muted);
+            fill: var(--muted);
+        }
+
         .app-shell {
             border-bottom: 1px solid var(--border);
             margin-bottom: 1.5rem;
@@ -151,6 +167,13 @@ def apply_dashboard_style() -> None:
             grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        .metric-grid--three {
+            display: grid;
+            gap: 1px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin: 1rem 0 1.25rem;
+        }
+
         .metric-card,
         .price-card,
         .item-panel,
@@ -194,6 +217,67 @@ def apply_dashboard_style() -> None:
             padding: 1rem;
         }
 
+        .lookup-hero {
+            align-items: stretch;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: 180px 1fr;
+            margin-top: 1rem;
+            padding: 1rem;
+        }
+
+        .item-image-frame {
+            align-items: center;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            min-height: 180px;
+            overflow: hidden;
+        }
+
+        .item-image-frame img {
+            display: block;
+            height: 160px;
+            max-width: 160px;
+            object-fit: contain;
+            width: 160px;
+        }
+
+        .item-image-placeholder {
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+        }
+
+        .verdict-panel {
+            background: var(--surface);
+            border: 2px solid var(--ink);
+            margin: 1rem 0;
+            padding: 1rem;
+        }
+
+        .verdict-kicker {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .verdict-title {
+            color: var(--ink);
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-top: 0.35rem;
+        }
+
+        .quick-picks {
+            margin-bottom: 0.65rem;
+        }
+
         .item-title {
             font-size: 1.45rem;
             font-weight: 700;
@@ -222,6 +306,30 @@ def apply_dashboard_style() -> None:
             color: var(--muted);
             margin: 1rem 0;
             padding: 0.9rem 1rem;
+        }
+
+        .app-footer {
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.6;
+            margin-top: 2.25rem;
+            padding-top: 1rem;
+        }
+
+        .app-footer a,
+        .app-footer span {
+            color: var(--muted);
+        }
+
+        .app-footer a {
+            text-decoration-color: var(--border);
+            text-underline-offset: 0.2rem;
+        }
+
+        .app-footer a:hover {
+            color: var(--ink);
+            text-decoration-color: var(--ink);
         }
 
         .bar-row {
@@ -343,6 +451,9 @@ def apply_dashboard_style() -> None:
             color: var(--ink);
             font-family: 'IBM Plex Sans', sans-serif;
             font-weight: 600;
+            min-height: 2.35rem;
+            white-space: normal;
+            width: 100%;
         }
 
         .stButton > button:hover,
@@ -366,6 +477,11 @@ def apply_dashboard_style() -> None:
             border: 1px solid var(--border);
         }
 
+        [data-testid="stDataFrame"] img {
+            max-height: 58px;
+            object-fit: contain;
+        }
+
         @media (max-width: 760px) {
             [data-testid="stAppViewBlockContainer"] {
                 padding-left: 1rem;
@@ -377,8 +493,23 @@ def apply_dashboard_style() -> None:
             }
 
             .metric-grid,
-            .price-grid {
+            .price-grid,
+            .metric-grid--three,
+            .lookup-hero {
                 grid-template-columns: 1fr;
+            }
+
+            .item-image-frame {
+                min-height: 150px;
+            }
+
+            .item-image-frame img {
+                height: 130px;
+                width: 130px;
+            }
+
+            .verdict-title {
+                font-size: 1.5rem;
             }
 
             .bar-row {
