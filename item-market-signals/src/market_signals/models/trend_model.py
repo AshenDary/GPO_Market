@@ -1,5 +1,5 @@
 """
-Computes per-item value trend across accumulated gpovalues snapshots.
+Computes per-item metric trends across accumulated gpovalues snapshots.
 
 MIN_SNAPSHOTS exists for the same reason the old baseline.py had a row
 guard: one data point isn't a trend, and pretending otherwise produces a
@@ -36,10 +36,23 @@ def load_snapshot_history(snapshot_dir: Path = SNAPSHOT_DIR) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def compute_trend(item_join_key: str, snapshot_dir: Path = SNAPSHOT_DIR) -> dict | None:
-    """Returns trend info for one item, or None if there isn't enough
-    snapshot history yet to say anything trustworthy."""
+def _latest_snapshot_file(snapshot_dir: Path = SNAPSHOT_DIR) -> Path:
+    files = sorted(snapshot_dir.glob("gpovalues_*.csv"))
+    if not files:
+        raise FileNotFoundError(f"No gpovalues snapshots found in {snapshot_dir}.")
+    return files[-1]
+
+
+def compute_trend(
+    item_join_key: str,
+    snapshot_dir: Path = SNAPSHOT_DIR,
+    value_column: str = "value",
+) -> dict | None:
+    """Returns trend info for one item metric, or None without enough history."""
     history = load_snapshot_history(snapshot_dir)
+    if value_column not in history.columns:
+        raise KeyError(f"Column '{value_column}' not found in gpovalues snapshots.")
+
     item_history = (
         history[history["join_key"] == item_join_key]
         .sort_values("snapshot_date")
@@ -52,17 +65,40 @@ def compute_trend(item_join_key: str, snapshot_dir: Path = SNAPSHOT_DIR) -> dict
     first = item_history.iloc[0]
     last = item_history.iloc[-1]
 
-    pct_change = ((last["value"] - first["value"]) / first["value"]) * 100
+    pct_change = ((last[value_column] - first[value_column]) / first[value_column]) * 100
 
     return {
+        "metric": value_column,
         "n_snapshots": n_snapshots,
         "first_date": first["snapshot_date"],
-        "first_value": first["value"],
+        "first_value": first[value_column],
         "last_date": last["snapshot_date"],
-        "last_value": last["value"],
+        "last_value": last[value_column],
         "pct_change": round(pct_change, 2),
         "direction": "up" if pct_change > 0 else ("down" if pct_change < 0 else "flat"),
     }
+
+
+def most_traded(snapshot_dir: Path = SNAPSHOT_DIR, limit: int = 15) -> pd.DataFrame:
+    """Rank current activity from the latest gpovalues snapshot only."""
+    latest_snapshot = _latest_snapshot_file(snapshot_dir)
+    snapshot = pd.read_csv(latest_snapshot)
+    required_columns = ["name", "tier", "trade_count", "value", "join_key"]
+    missing_columns = [col for col in required_columns if col not in snapshot.columns]
+    if missing_columns:
+        raise KeyError(
+            f"Latest gpovalues snapshot is missing columns: {', '.join(missing_columns)}"
+        )
+
+    ranking = snapshot[required_columns].copy()
+    ranking["trade_count"] = pd.to_numeric(ranking["trade_count"], errors="coerce")
+    ranking["value"] = pd.to_numeric(ranking["value"], errors="coerce")
+    return (
+        ranking.dropna(subset=["trade_count"])
+        .sort_values("trade_count", ascending=False)
+        .head(limit)
+        .reset_index(drop=True)
+    )
 
 
 if __name__ == "__main__":
