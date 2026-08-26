@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from dashboard.components.data import load_feature_matrix
+from dashboard.components.data import load_feature_matrix, load_history, load_most_traded
 from dashboard.components.layout import render_refresh_button
 from dashboard.components.views import render_overview
 
@@ -17,4 +17,15 @@ except FileNotFoundError as exc:
     st.error(str(exc))
     st.stop()
 
-render_overview(feature_matrix)
+try:
+    snapshot_history = load_history()
+except FileNotFoundError:
+    snapshot_history = None
+
+try:
+    active_items = load_most_traded()
+except FileNotFoundError as exc:
+    st.error(str(exc))
+    st.stop()
+
+render_overview(feature_matrix, snapshot_history, active_items)

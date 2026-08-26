@@ -50,6 +50,92 @@ def _number_span(value: float | int | None) -> str:
     return f'<span class="num">{escape(_format_value(value))}</span>'
 
 
+def _trend_notice(trend: dict, metric_label: str = "Trend") -> None:
+    st.markdown(
+        (
+            f'<div class="notice">{escape(metric_label)}: '
+            f'<strong>{escape(trend["direction"])}</strong> '
+            f'<span class="num">{trend["pct_change"]:+.1f}%</span> over '
+            f'<span class="num">{trend["n_snapshots"]}</span> snapshots '
+            f'<span class="num">({escape(trend["first_date"])} -> {escape(trend["last_date"])})</span>.</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_item_trend_chart(
+    row: pd.Series,
+    history: pd.DataFrame | None,
+    value_column: str = "value",
+    y_axis_title: str = "Solved value",
+    metric_label: str = "Trend",
+) -> bool:
+    if history is None or history["snapshot_date"].nunique() < MIN_SNAPSHOTS:
+        n_dates = 0 if history is None else history["snapshot_date"].nunique()
+        _notice(
+            f"Need {MIN_SNAPSHOTS}+ snapshot dates to compute a trend. "
+            f"Current snapshot dates: {n_dates}."
+        )
+        return False
+
+    trend = compute_trend(row["join_key"], value_column=value_column)
+    item_history = (
+        history[history["join_key"] == row["join_key"]]
+        .sort_values("snapshot_date")[["snapshot_date", value_column]]
+    )
+    if trend is None or item_history["snapshot_date"].nunique() < MIN_SNAPSHOTS:
+        _notice(f"Not enough snapshot history yet for {row['name']}.")
+        return False
+
+    item_history = item_history.assign(snapshot_date=pd.to_datetime(item_history["snapshot_date"]))
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=item_history["snapshot_date"],
+                y=item_history[value_column],
+                mode="lines+markers",
+                line={"color": PALETTE["ink"], "width": 2},
+                marker={
+                    "symbol": "diamond",
+                    "size": 9,
+                    "color": PALETTE["surface"],
+                    "line": {"color": PALETTE["ink"], "width": 1},
+                },
+                customdata=item_history["snapshot_date"].dt.strftime("%Y-%m-%d"),
+                hovertemplate=f"Date: %{{customdata}}<br>{escape(y_axis_title)}: %{{y:,.0f}}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title=str(row["name"]),
+        paper_bgcolor=PALETTE["bg"],
+        plot_bgcolor=PALETTE["bg"],
+        font={"color": PALETTE["muted"], "family": "IBM Plex Sans"},
+        hoverlabel={
+            "bgcolor": PALETTE["surface"],
+            "bordercolor": PALETTE["border"],
+            "font_color": PALETTE["ink"],
+        },
+        margin={"l": 20, "r": 20, "t": 48, "b": 20},
+        xaxis={
+            "title": {"text": "Snapshot date", "font": {"color": PALETTE["muted"]}},
+            "gridcolor": PALETTE["border"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+        },
+        yaxis={
+            "title": {"text": y_axis_title, "font": {"color": PALETTE["muted"]}},
+            "gridcolor": PALETTE["border"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+            "tickformat": ",.0f",
+        },
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    _trend_notice(trend, metric_label)
+    return True
+
+
 def _render_price_grid(row: pd.Series) -> None:
     cards = "".join(
         f'<div class="price-card"><div class="price-label">{escape(label)}</div>'
@@ -195,7 +281,11 @@ def _render_confidence_bars(confidence_counts: pd.DataFrame) -> None:
     )
 
 
-def render_overview(df: pd.DataFrame) -> None:
+def render_overview(
+    df: pd.DataFrame,
+    history: pd.DataFrame | None = None,
+    most_traded_df: pd.DataFrame | None = None,
+) -> None:
     _section_title("Market Overview")
 
     confidence_counts = (
@@ -240,6 +330,71 @@ def render_overview(df: pd.DataFrame) -> None:
     for text in legend.get_texts():
         text.set_color(PALETTE["muted"])
     st.pyplot(fig, clear_figure=True)
+
+    _section_title("Most Actively Traded")
+    _notice(
+        "trade_count reflects gpovalues' decayed activity signal: a 12-hour or "
+        "30-day decayed trade count, whichever window currently fits the item "
+        "better. Treat it as current activity level, not literal trades today."
+    )
+
+    if most_traded_df is None or most_traded_df.empty:
+        _notice("No trade_count data is available in the latest gpovalues snapshot.")
+        return
+
+    table_df = most_traded_df.copy()
+    table_df.insert(0, "rank", range(1, len(table_df) + 1))
+    table_df["value"] = pd.to_numeric(table_df["value"], errors="coerce").round().astype("Int64")
+    table_df["trade_count"] = pd.to_numeric(table_df["trade_count"], errors="coerce").astype("Int64")
+    display_df = table_df[["rank", "name", "tier", "trade_count", "value"]].rename(
+        columns={
+            "rank": "Rank",
+            "name": "Name",
+            "tier": "Tier",
+            "trade_count": "Trade count",
+            "value": "Current value",
+        }
+    )
+    styled_table = display_df.style.map(_badge_style, subset=["Tier"])
+    selection = st.dataframe(
+        styled_table,
+        hide_index=True,
+        use_container_width=True,
+        height=600,
+        selection_mode="single-row",
+        on_select="rerun",
+        key="most_traded_ranking",
+        column_config={
+            "Rank": st.column_config.NumberColumn("Rank", width="small"),
+            "Name": st.column_config.TextColumn("Name", width="large"),
+            "Tier": st.column_config.TextColumn("Tier"),
+            "Trade count": st.column_config.NumberColumn("Trade count", format="localized"),
+            "Current value": st.column_config.NumberColumn("Current value", format="localized"),
+        },
+    )
+
+    selected_rows = getattr(getattr(selection, "selection", None), "rows", [])
+    if not selected_rows:
+        _notice("Select an item in the ranking to inspect its accumulated snapshot trends.")
+        return
+
+    selected_rank = selected_rows[0]
+    selected_item = table_df.iloc[selected_rank]
+    _section_title(f"{selected_item['name']} Trend")
+    _render_item_trend_chart(
+        selected_item,
+        history,
+        value_column="value",
+        y_axis_title="Solved value",
+        metric_label="Value trend",
+    )
+    _render_item_trend_chart(
+        selected_item,
+        history,
+        value_column="trade_count",
+        y_axis_title="Trade count activity signal",
+        metric_label="Trade count trend",
+    )
 
 
 def render_lookup(df: pd.DataFrame) -> None:
@@ -372,67 +527,4 @@ def render_trend(df: pd.DataFrame, history: pd.DataFrame | None) -> None:
         _notice(f"No match found for '{selected}'.")
         return
 
-    trend = compute_trend(row["join_key"])
-    item_history = (
-        history[history["join_key"] == row["join_key"]]
-        .sort_values("snapshot_date")[["snapshot_date", "value"]]
-    )
-    if trend is None or item_history["snapshot_date"].nunique() < MIN_SNAPSHOTS:
-        _notice(f"Not enough snapshot history yet for {row['name']}.")
-        return
-
-    item_history = item_history.assign(snapshot_date=pd.to_datetime(item_history["snapshot_date"]))
-    fig = go.Figure(
-        data=[
-            go.Scatter(
-                x=item_history["snapshot_date"],
-                y=item_history["value"],
-                mode="lines+markers",
-                line={"color": PALETTE["ink"], "width": 2},
-                marker={
-                    "symbol": "diamond",
-                    "size": 9,
-                    "color": PALETTE["surface"],
-                    "line": {"color": PALETTE["ink"], "width": 1},
-                },
-                customdata=item_history["snapshot_date"].dt.strftime("%Y-%m-%d"),
-                hovertemplate="Date: %{customdata}<br>Value: %{y:,.0f}<extra></extra>",
-            )
-        ]
-    )
-    fig.update_layout(
-        title=str(row["name"]),
-        paper_bgcolor=PALETTE["bg"],
-        plot_bgcolor=PALETTE["bg"],
-        font={"color": PALETTE["muted"], "family": "IBM Plex Sans"},
-        hoverlabel={
-            "bgcolor": PALETTE["surface"],
-            "bordercolor": PALETTE["border"],
-            "font_color": PALETTE["ink"],
-        },
-        margin={"l": 20, "r": 20, "t": 48, "b": 20},
-        xaxis={
-            "title": {"text": "Snapshot date", "font": {"color": PALETTE["muted"]}},
-            "gridcolor": PALETTE["border"],
-            "linecolor": PALETTE["border"],
-            "tickfont": {"color": PALETTE["muted"]},
-        },
-        yaxis={
-            "title": {"text": "Solved value", "font": {"color": PALETTE["muted"]}},
-            "gridcolor": PALETTE["border"],
-            "linecolor": PALETTE["border"],
-            "tickfont": {"color": PALETTE["muted"]},
-            "tickformat": ",.0f",
-        },
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown(
-        (
-            '<div class="notice">Trend: '
-            f'<strong>{escape(trend["direction"])}</strong> '
-            f'<span class="num">{trend["pct_change"]:+.1f}%</span> over '
-            f'<span class="num">{trend["n_snapshots"]}</span> snapshots '
-            f'<span class="num">({escape(trend["first_date"])} -> {escape(trend["last_date"])})</span>.</div>'
-        ),
-        unsafe_allow_html=True,
-    )
+    _render_item_trend_chart(row, history)
