@@ -96,12 +96,7 @@ parser needs it; other raw JSON pulls remain ignored.
 
 ## Current phase
 
-Per ROADMAP.md: repo is built and tested (Phase 0-1 complete), with the
-Streamlit dashboard and GitHub Actions freshness job now added. The current
-dashboard frontend is a deliberate monochrome redesign (custom CSS, chart
-panels, confidence-band visuals, and top-navigation multipage flow).
-Snapshot accumulation remains ongoing, and trend output is now available
-because multiple snapshot dates are present.
+Per ROADMAP.md: Currently gathering snapshots day to day and planning to handle further UI and UX development. Testing snapshots and trends based on scraped data.
 
 ## Design principles (don't violate these when extending the code)
 
@@ -152,3 +147,5 @@ because multiple snapshot dates are present.
 - Streamlit caching can make the dashboard look stale right after running a
   pipeline stage. Use the sidebar `Refresh data` button before assuming data
   did not update.
+
+
