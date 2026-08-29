@@ -9,6 +9,7 @@ from textwrap import dedent
 import streamlit as st
 
 _ROOT = Path(__file__).resolve().parent.parent
+FAVICON_PATH = _ROOT / "dashboard" / "assets" / "strawhat_favicon.png"
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
@@ -27,7 +28,7 @@ NAV_PAGES = [
 REPO_URL = "https://github.com/AshenDary/GPO_Market.git"
 
 
-st.set_page_config(page_title="GPO Item Market Signals", page_icon="📈", layout="wide")
+st.set_page_config(page_title="GPO Item Market Signals", page_icon=str(FAVICON_PATH), layout="wide")
 apply_dashboard_style()
 
 st.markdown(
