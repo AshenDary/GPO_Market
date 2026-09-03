@@ -7,6 +7,7 @@ resolution, and price verdicts stay in the existing package modules.
 from __future__ import annotations
 
 from html import escape
+from uuid import uuid4
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -14,8 +15,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.components.layout import render_metric_cards
-from market_signals.evaluator.evaluate import find_item_matches, resolve_item, verdict
+from market_signals.evaluator.evaluate import (
+    find_item_matches,
+    resolve_item,
+    trade_range_verdict,
+    verdict,
+)
 from market_signals.models.trend_model import MIN_SNAPSHOTS, compute_trend
+
+LOW_CONFIDENCE_CAVEAT = "Low-confidence item: treat this value as directional, not exact."
 
 PALETTE = {
     "bg": "#0A0A0A",
@@ -44,6 +52,32 @@ def _section_title(label: str) -> None:
 
 def _notice(message: str) -> None:
     st.markdown(f'<div class="notice">{escape(message)}</div>', unsafe_allow_html=True)
+
+
+def _item_names(df: pd.DataFrame) -> list[str]:
+    return sorted(str(name) for name in df["name"].dropna().unique())
+
+
+def render_item_picker(
+    df: pd.DataFrame,
+    key: str,
+    label: str = "Item",
+    *,
+    allow_new_options: bool = False,
+    default_to_first: bool = True,
+    placeholder: str = "Search or choose an item",
+) -> str | None:
+    """Render the shared searchable item picker used by lookup-style views."""
+    names = _item_names(df)
+    index = 0 if default_to_first and names else None
+    return st.selectbox(
+        label,
+        names,
+        index=index,
+        key=key,
+        placeholder=placeholder,
+        accept_new_options=allow_new_options,
+    )
 
 
 def _number_span(value: float | int | None) -> str:
@@ -170,6 +204,18 @@ def _image_html(image_url: object) -> str:
     return '<span class="item-image-placeholder">NO IMAGE</span>'
 
 
+def _render_verdict_message(kicker: str, title: str) -> None:
+    st.markdown(
+        (
+            '<div class="verdict-panel">'
+            f'<div class="verdict-kicker">{escape(kicker)}</div>'
+            f'<div class="verdict-title">{escape(title)}</div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _render_verdict_panel(row: pd.Series, asking_price: float) -> None:
     low = _as_float(row["ci_low"])
     high = _as_float(row["ci_high"])
@@ -183,15 +229,7 @@ def _render_verdict_panel(row: pd.Series, asking_price: float) -> None:
         title = verdict_text
         kicker = f"Asking {_format_value(asking_price)}"
 
-    st.markdown(
-        (
-            '<div class="verdict-panel">'
-            f'<div class="verdict-kicker">{escape(kicker)}</div>'
-            f'<div class="verdict-title">{escape(title)}</div>'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
+    _render_verdict_message(kicker, title)
 
 
 def _render_confidence_band(row: pd.Series, asking_price: float = 0.0) -> None:
@@ -400,8 +438,6 @@ def render_overview(
 def render_lookup(df: pd.DataFrame) -> None:
     _section_title("Item Lookup")
 
-    names = sorted(df["name"].dropna().unique())
-
     quick_picks = (
         df.dropna(subset=["trade_count"])
         .sort_values("trade_count", ascending=False)
@@ -416,11 +452,11 @@ def render_lookup(df: pd.DataFrame) -> None:
                 st.session_state["lookup_item"] = item_name
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if "lookup_item" not in st.session_state and names:
-        st.session_state["lookup_item"] = names[0]
-
-    selected = st.selectbox("Item", names, key="lookup_item")
+    selected = render_item_picker(df, "lookup_item")
     asking_price = st.number_input("Asking price", min_value=0.0, step=1000.0, value=0.0)
+    if selected is None:
+        _notice("No items are available in the feature matrix yet.")
+        return
 
     row = resolve_item(df, selected)
     if row is None:
@@ -458,7 +494,7 @@ def render_lookup(df: pd.DataFrame) -> None:
     )
     _render_confidence_band(row, asking_price)
     if row["confidence"] == "low":
-        _notice("Low-confidence item: treat this value as directional, not exact.")
+        _notice(LOW_CONFIDENCE_CAVEAT)
 
 
 def _badge_style(_: object) -> str:
@@ -470,6 +506,195 @@ def _badge_style(_: object) -> str:
         "font-weight: 600; "
         "text-align: center;"
     )
+
+
+def _badge_html(label: object, modifier: str = "") -> str:
+    classes = "pill-badge"
+    if modifier:
+        classes = f"{classes} pill-badge--{modifier}"
+    return f'<span class="{classes}">{escape(str(label))}</span>'
+
+
+def _trade_state_key(side_key: str) -> str:
+    return f"trade_simulator_{side_key}_items"
+
+
+def _make_priced_trade_item(row: pd.Series) -> dict[str, object]:
+    return {
+        "id": f"priced-{uuid4().hex}",
+        "priced": True,
+        "join_key": str(row["join_key"]),
+        "name": str(row["name"]),
+        "value": _as_float(row["value"]),
+        "ci_low": _as_float(row["ci_low"]),
+        "ci_high": _as_float(row["ci_high"]),
+        "confidence": str(row["confidence"]),
+    }
+
+
+def _make_unpriced_trade_item(name: str) -> dict[str, object]:
+    return {
+        "id": f"unpriced-{uuid4().hex}",
+        "priced": False,
+        "name": name,
+        "value": None,
+        "ci_low": None,
+        "ci_high": None,
+        "confidence": "no value data",
+    }
+
+
+def _resolve_trade_item(df: pd.DataFrame, item_name: str) -> tuple[dict[str, object] | None, str | None]:
+    name = item_name.strip()
+    if not name:
+        return None, "Search for an item before adding it."
+
+    row = resolve_item(df, name)
+    if row is not None:
+        return _make_priced_trade_item(row), None
+
+    matches = find_item_matches(df, name)
+    if len(matches) > 1:
+        return None, f"Multiple matches found for '{name}'. Choose the exact item from the picker."
+
+    return _make_unpriced_trade_item(name), None
+
+
+def _sum_trade_items(items: list[dict[str, object]]) -> dict[str, float | int]:
+    priced_items = [
+        item
+        for item in items
+        if item.get("priced")
+        and _as_float(item.get("value")) is not None
+        and _as_float(item.get("ci_low")) is not None
+        and _as_float(item.get("ci_high")) is not None
+    ]
+    return {
+        "value": sum(_as_float(item.get("value")) or 0.0 for item in priced_items),
+        "ci_low": sum(_as_float(item.get("ci_low")) or 0.0 for item in priced_items),
+        "ci_high": sum(_as_float(item.get("ci_high")) or 0.0 for item in priced_items),
+        "priced_count": len(priced_items),
+        "unpriced_count": len(items) - len(priced_items),
+    }
+
+
+def _render_trade_row(side_key: str, item: dict[str, object]) -> None:
+    row_class = "trade-row trade-row--unpriced" if not item.get("priced") else "trade-row"
+    name = escape(str(item["name"]))
+    confidence = str(item.get("confidence", "unknown"))
+
+    if item.get("priced"):
+        value_text = _format_value(item.get("value"))
+        range_text = f"{_format_value(item.get('ci_low'))} - {_format_value(item.get('ci_high'))}"
+        confidence_badge = _badge_html(confidence, confidence.lower())
+        caveat = f'<div class="trade-caveat">{escape(LOW_CONFIDENCE_CAVEAT)}</div>' if confidence == "low" else ""
+        detail = (
+            f'<div class="trade-row-value"><span class="num">{escape(value_text)}</span>{confidence_badge}</div>'
+            f'<div class="trade-row-meta">Approx range <span class="num">{escape(range_text)}</span></div>{caveat}'
+        )
+    else:
+        detail = (
+            f'<div class="trade-row-value">{_badge_html("no value data", "unpriced")}</div>'
+            '<div class="trade-row-meta">Excluded from subtotals.</div>'
+        )
+
+    row_cols = st.columns([0.78, 0.22], vertical_alignment="center")
+    with row_cols[0]:
+        st.markdown(
+            (
+                f'<div class="{row_class}">'
+                f'<div class="trade-row-name">{name}</div>'
+                f"{detail}</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+    with row_cols[1]:
+        if st.button(
+            "Remove",
+            key=f"remove_{side_key}_{item['id']}",
+            icon=":material/delete:",
+            width="stretch",
+        ):
+            state_key = _trade_state_key(side_key)
+            st.session_state[state_key] = [
+                saved_item
+                for saved_item in st.session_state[state_key]
+                if saved_item["id"] != item["id"]
+            ]
+            st.rerun()
+
+
+def _render_trade_panel(df: pd.DataFrame, title: str, side_key: str) -> dict[str, float | int]:
+    state_key = _trade_state_key(side_key)
+    st.session_state.setdefault(state_key, [])
+
+    _section_title(title)
+    selected = render_item_picker(
+        df,
+        f"{side_key}_item_picker",
+        label=f"Add to {title}",
+        allow_new_options=True,
+        default_to_first=False,
+    )
+    if st.button("Add item", key=f"add_{side_key}", icon=":material/add:", width="stretch"):
+        item, message = _resolve_trade_item(df, str(selected or ""))
+        if message is not None:
+            st.warning(message)
+        elif item is not None:
+            st.session_state[state_key].append(item)
+            st.rerun()
+
+    items = st.session_state[state_key]
+    subtotal = _sum_trade_items(items)
+    render_metric_cards(
+        [
+            ("Approx value total", _format_value(subtotal["value"])),
+            ("Approx low sum", _format_value(subtotal["ci_low"])),
+            ("Approx high sum", _format_value(subtotal["ci_high"])),
+        ],
+        class_name="metric-grid--three trade-subtotal-grid",
+    )
+    _notice("Approximate range is a simple sum of each priced item's low/high bounds, not a combined confidence interval.")
+
+    if not items:
+        _notice(f"Add items to {title.lower()} to start comparing the trade.")
+        return subtotal
+
+    for item in items:
+        _render_trade_row(side_key, item)
+
+    if subtotal["unpriced_count"]:
+        _notice(f"{subtotal['unpriced_count']} unpriced item(s) are shown but excluded from this side's subtotal.")
+    return subtotal
+
+
+def render_trade_simulator(df: pd.DataFrame) -> None:
+    _section_title("Trade Simulator")
+
+    verdict_slot = st.container()
+    give_col, get_col = st.columns(2)
+    with give_col:
+        give_total = _render_trade_panel(df, "You Give", "give")
+    with get_col:
+        get_total = _render_trade_panel(df, "You Get", "get")
+
+    give_items = st.session_state.get(_trade_state_key("give"), [])
+    get_items = st.session_state.get(_trade_state_key("get"), [])
+    with verdict_slot:
+        if not give_items or not get_items:
+            _render_verdict_message("Trade verdict", "Add at least one item to both sides.")
+            return
+        if give_total["priced_count"] == 0 or get_total["priced_count"] == 0:
+            _render_verdict_message("Trade verdict", "Add at least one priced item to both sides for a value verdict.")
+            return
+
+        verdict_text = trade_range_verdict(
+            float(give_total["ci_low"]),
+            float(give_total["ci_high"]),
+            float(get_total["ci_low"]),
+            float(get_total["ci_high"]),
+        )
+        _render_verdict_message("Trade verdict", verdict_text)
 
 
 def render_value_list(df: pd.DataFrame) -> None:
