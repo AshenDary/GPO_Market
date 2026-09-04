@@ -1,17 +1,19 @@
 # item-market-signals
 
-An evaluator for a virtual item secondary market: pulls real, continuously
-updated community-solved item values from a public API, enriches them with
-structural tier/rarity data, tracks value trend over time, and tells you
-whether a given asking price is a good deal.
+Item Market Signals is a market intelligence dashboard and evaluator for the
+Grand Piece Online trading economy. It pulls continuously updated community
+values from gpovalues.com, enriches them with tier, rarity, and obtainability
+context, tracks dated market snapshots, and turns asking prices into practical
+buy, fair, or overpriced signals.
 
 The project exposes two user-facing interfaces:
 
 - CLI evaluator (`market_signals.evaluator.evaluate`)
-- Streamlit dashboard (`dashboard/app.py`) with Overview, Item lookup, and
-   Trend tabs
+- Streamlit dashboard (`dashboard/app.py`) with Overview, Item lookup, Trade
+   Simulator, Trend, Value List, and How it works views
 
-See `ROADMAP.md` for the phase-by-phase plan this repo is built around.
+See `CONTEXT.md` for the current architecture and `ROADMAP.md` for planned
+improvements.
 
 ## Data sources
 
