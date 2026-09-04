@@ -1,9 +1,13 @@
 # Item Market Signals
 
-An item-market valuation project for the Grand Piece Online trading economy.
-It ingests live community pricing, enriches rows with tier/rarity context,
-tracks dated snapshots, and returns practical valuation signals through both
-a CLI evaluator and a Streamlit dashboard.
+Item Market Signals is a market intelligence dashboard for the Grand Piece
+Online trading economy. It combines continuously updated community values
+from gpovalues.com with tier, rarity, and obtainability context, then turns
+that data into practical buy, fair, and overpriced signals for item decisions.
+
+The project includes a Streamlit dashboard for exploring the market and a CLI
+evaluator for quick item checks. Dated snapshots preserve market history so
+trend signals can be measured as more observations accumulate.
 
 The active project code lives in the `item-market-signals/` folder.
 
@@ -15,7 +19,8 @@ The active project code lives in the `item-market-signals/` folder.
 - Feature merging by exact item name, then shortcut/alias fallback
 - Explicit uncertainty handling through confidence labels and value ranges
 - A user-facing CLI that returns a practical buy/fair/overpriced signal
-- A Streamlit dashboard with overview, lookup, and trend tabs
+- A Streamlit dashboard with Overview, Item lookup, Trade Simulator, Trend,
+  Value List, and How it works views
 - Offline tests using saved fixtures instead of live network calls
 
 ## Example

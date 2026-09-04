@@ -79,6 +79,20 @@ def verdict(asking_price: float, value: float, ci_low: float, ci_high: float) ->
     return "OVERPRICED -- asking price is above the typical trade range"
 
 
+def trade_range_verdict(
+    give_ci_low: float,
+    give_ci_high: float,
+    get_ci_low: float,
+    get_ci_high: float,
+) -> str:
+    """Compare summed trade ranges without forcing a false precise answer."""
+    if give_ci_low > get_ci_high:
+        return "FAVORS OTHER PERSON -- you're giving up more than you'd get"
+    if get_ci_low > give_ci_high:
+        return "FAVORS YOU -- you'd get more value than you're giving"
+    return "ROUGHLY FAIR -- summed ranges overlap, so it is hard to call precisely"
+
+
 def _verdict(asking_price: float, value: float, ci_low: float, ci_high: float) -> str:
     return verdict(asking_price, value, ci_low, ci_high)
 

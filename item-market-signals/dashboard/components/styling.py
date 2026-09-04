@@ -308,6 +308,70 @@ def apply_dashboard_style() -> None:
             padding: 0.9rem 1rem;
         }
 
+        .trade-subtotal-grid {
+            margin-bottom: 0.5rem;
+        }
+
+        .trade-row {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            margin: 0.55rem 0;
+            min-height: 86px;
+            padding: 0.85rem 1rem;
+        }
+
+        .trade-row--unpriced {
+            background: var(--bg);
+            border-style: dashed;
+        }
+
+        .trade-row-name {
+            color: var(--ink);
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .trade-row-value {
+            align-items: center;
+            color: var(--ink);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.35rem;
+        }
+
+        .trade-row-meta,
+        .trade-caveat {
+            color: var(--muted);
+            font-size: 0.78rem;
+            margin-top: 0.3rem;
+        }
+
+        .trade-caveat {
+            color: var(--ink);
+        }
+
+        .pill-badge {
+            background: var(--surface);
+            border: 1px solid var(--muted);
+            border-radius: 999px;
+            color: var(--ink);
+            display: inline-flex;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1;
+            padding: 0.32rem 0.55rem;
+            text-transform: uppercase;
+        }
+
+        .pill-badge--low,
+        .pill-badge--unpriced {
+            background: var(--bg);
+            border-color: var(--ink);
+        }
+
         .app-footer {
             border-top: 1px solid var(--border);
             color: var(--muted);
