@@ -1,0 +1,11 @@
+name,value,confidence,tier_ordinal,sub_tier_ordinal,demand_ordinal,demand_ratio,category,obtainability,is_unstable,is_unobtainable
+Tier 1 Sword,10,high,1,2,2,1.0,Weapon,DROP,False,False
+Tier 2 Sword,24,high,2,2,2,1.0,Weapon,DROP,False,False
+Tier 3 Sword,58,medium,3,2,2,1.0,Weapon,DROP,False,False
+Tier 4 Sword,139,high,4,2,2,1.0,Weapon,DROP,False,False
+Tier 5 Sword,334,medium,5,2,2,1.0,Weapon,DROP,False,False
+Tier 6 Sword,802,high,6,2,2,1.0,Weapon,DROP,False,False
+Tier 7 Sword,1925,medium,7,2,2,1.0,Weapon,DROP,False,False
+Tier 8 Sword,4620,high,8,2,2,1.0,Weapon,DROP,False,False
+Tier 9 Sword,11088,high,9,2,2,1.0,Weapon,DROP,False,False
+Noisy Low Confidence Sword,99999,low,4,2,2,1.0,Weapon,DROP,False,False
