@@ -7,6 +7,11 @@ import streamlit as st
 
 from market_signals.features.build_feature_matrix import build_feature_matrix
 from market_signals.models.trend_model import load_snapshot_history, most_traded
+from market_signals.models.value_regression import (
+    ValueRegressionResult,
+    load_latest_tier_reference,
+    train_value_regression,
+)
 
 CACHE_TTL_SECONDS = 60 * 60
 
@@ -27,3 +32,15 @@ def load_history() -> pd.DataFrame:
 def load_most_traded(limit: int = 15) -> pd.DataFrame:
     """Load the current most actively traded item ranking."""
     return most_traded(limit=limit)
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def load_tier_reference() -> pd.DataFrame:
+    """Load the latest structural tier-reference snapshot."""
+    return load_latest_tier_reference()
+
+
+@st.cache_resource(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def load_value_regression_model() -> ValueRegressionResult:
+    """Train and cache the structural value model object."""
+    return train_value_regression()

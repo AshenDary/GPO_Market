@@ -22,6 +22,14 @@ from market_signals.evaluator.evaluate import (
     verdict,
 )
 from market_signals.models.trend_model import MIN_SNAPSHOTS, compute_trend
+from market_signals.models.value_regression import (
+    ValueRegressionResult,
+    build_model_estimates,
+    estimate_item_by_name,
+    feature_importance,
+    predict_value,
+    score_actual_values,
+)
 
 LOW_CONFIDENCE_CAVEAT = "Low-confidence item: treat this value as directional, not exact."
 
@@ -435,7 +443,37 @@ def render_overview(
     )
 
 
-def render_lookup(df: pd.DataFrame) -> None:
+def _render_model_estimate_panel(row: pd.Series, reason: str) -> None:
+    name = row.get("name", "unknown item")
+    estimate = row.get("predicted_value")
+    actual = row.get("actual_value")
+    _notice(
+        "Model-derived estimate: treat this as directional, not an observed gpovalues value."
+    )
+    metrics = [
+        ("Model-derived estimate", _format_value(estimate)),
+        ("Estimate reason", reason),
+    ]
+    if _as_float(actual) is not None:
+        metrics.append(("Observed gpovalues value", _format_value(actual)))
+    render_metric_cards(metrics, class_name="metric-grid--three")
+    st.markdown(
+        (
+            '<div class="item-panel">'
+            f'<h3 class="item-title">{escape(str(name))}</h3>'
+            '<p class="item-meta">Estimated from structural tier/category features learned from '
+            'medium- and high-confidence gpovalues items.</p>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_lookup(
+    df: pd.DataFrame,
+    value_model: ValueRegressionResult | None = None,
+    tier_reference: pd.DataFrame | None = None,
+) -> None:
     _section_title("Item Lookup")
 
     quick_picks = (
@@ -452,7 +490,7 @@ def render_lookup(df: pd.DataFrame) -> None:
                 st.session_state["lookup_item"] = item_name
     st.markdown("</div>", unsafe_allow_html=True)
 
-    selected = render_item_picker(df, "lookup_item")
+    selected = render_item_picker(df, "lookup_item", allow_new_options=value_model is not None)
     asking_price = st.number_input("Asking price", min_value=0.0, step=1000.0, value=0.0)
     if selected is None:
         _notice("No items are available in the feature matrix yet.")
@@ -460,6 +498,13 @@ def render_lookup(df: pd.DataFrame) -> None:
 
     row = resolve_item(df, selected)
     if row is None:
+        if value_model is not None:
+            estimate, message = estimate_item_by_name(value_model, selected, df, tier_reference)
+            if estimate is not None:
+                _render_model_estimate_panel(estimate, "no gpovalues match")
+                return
+            _notice(message or f"No match found for '{selected}'.")
+            return
         _notice(f"No match found for '{selected}'.")
         return
 
@@ -495,6 +540,11 @@ def render_lookup(df: pd.DataFrame) -> None:
     _render_confidence_band(row, asking_price)
     if row["confidence"] == "low":
         _notice(LOW_CONFIDENCE_CAVEAT)
+        if value_model is not None:
+            estimated_row = row.copy()
+            estimated_row["predicted_value"] = predict_value(value_model, row)
+            estimated_row["actual_value"] = row["value"]
+            _render_model_estimate_panel(estimated_row, "thin gpovalues data")
 
 
 def _badge_style(_: object) -> str:
@@ -695,6 +745,152 @@ def render_trade_simulator(df: pd.DataFrame) -> None:
             float(get_total["ci_high"]),
         )
         _render_verdict_message("Trade verdict", verdict_text)
+
+
+def render_model_insights(
+    df: pd.DataFrame,
+    value_model: ValueRegressionResult,
+    tier_reference: pd.DataFrame,
+) -> None:
+    _section_title("Model Insights")
+
+    metrics = value_model.metrics
+    render_metric_cards(
+        [
+            ("Model", value_model.model_type),
+            ("Training rows", f"{value_model.training_sample_count:,}"),
+            ("Held-out R2, log scale", f"{metrics.r2_log:.3f}"),
+            ("Held-out MAE, log scale", f"{metrics.mae_log:.3f}"),
+            ("Held-out MAE, value", _format_value(metrics.mae_value)),
+            ("Median abs error, value", _format_value(metrics.median_abs_error_value)),
+        ],
+        class_name="metric-grid--three",
+    )
+    _notice(value_model.selection_note)
+
+    _section_title("Feature Importance")
+    importance_df = feature_importance(value_model).head(20)
+    st.dataframe(
+        importance_df,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "feature": st.column_config.TextColumn("Feature", width="large"),
+            "log coefficient": st.column_config.NumberColumn("Log coefficient", format="%.3f"),
+            "importance": st.column_config.NumberColumn("Importance", format="%.3f"),
+            "absolute_effect": st.column_config.NumberColumn("Absolute effect", format="%.3f"),
+        },
+    )
+
+    _section_title("Predicted vs Actual")
+    scored = score_actual_values(value_model, df)
+    query = st.text_input("Search anomalies by item name", key="model_insights_search")
+    if query.strip():
+        scored = scored[
+            scored["name"].fillna("").astype(str).str.contains(query.strip(), case=False, regex=False)
+        ]
+    scored = scored.sort_values(
+        ["notable_structural_residual", "abs_log_residual"],
+        ascending=[False, False],
+    )
+    anomaly_table = scored[
+        [
+            "name",
+            "confidence",
+            "value",
+            "predicted_value",
+            "log_residual",
+            "abs_log_residual",
+            "notable_structural_residual",
+            "structural_note",
+        ]
+    ].rename(
+        columns={
+            "name": "Name",
+            "confidence": "Confidence",
+            "value": "Actual gpovalues value",
+            "predicted_value": "Model predicted value",
+            "log_residual": "Log residual",
+            "abs_log_residual": "Abs log residual",
+            "notable_structural_residual": "Notable",
+            "structural_note": "Note",
+        }
+    )
+    st.dataframe(
+        anomaly_table,
+        hide_index=True,
+        width="stretch",
+        height=520,
+        column_config={
+            "Name": st.column_config.TextColumn("Name", width="large"),
+            "Confidence": st.column_config.TextColumn("Confidence"),
+            "Actual gpovalues value": st.column_config.NumberColumn("Actual gpovalues value", format="localized"),
+            "Model predicted value": st.column_config.NumberColumn("Model predicted value", format="localized"),
+            "Log residual": st.column_config.NumberColumn("Log residual", format="%.3f"),
+            "Abs log residual": st.column_config.NumberColumn("Abs log residual", format="%.3f"),
+            "Notable": st.column_config.CheckboxColumn("Notable"),
+            "Note": st.column_config.TextColumn("Note", width="large"),
+        },
+    )
+    _notice(
+        "Notable rows are priced differently than similar items by tier/category, or are not well-explained "
+        "by structural features alone. This is a curiosity flag, not a correction to gpovalues."
+    )
+
+    _section_title("Model-Derived Estimates")
+    estimates = build_model_estimates(value_model, df, tier_reference)
+    if estimates.empty:
+        _notice("No low-confidence or tier-only items are available for model-derived estimates.")
+        return
+
+    estimate_query = st.text_input("Search model estimates by item name", key="model_estimates_search")
+    if estimate_query.strip():
+        estimates = estimates[
+            estimates["name"].fillna("").astype(str).str.contains(estimate_query.strip(), case=False, regex=False)
+        ]
+    estimates = estimates.sort_values(["estimate_reason", "predicted_value"], ascending=[True, False])
+    estimate_table = estimates[
+        [
+            "name",
+            "estimate_reason",
+            "confidence",
+            "actual_value",
+            "predicted_value",
+            "tier_tier",
+            "category",
+            "obtainability",
+        ]
+    ].rename(
+        columns={
+            "name": "Name",
+            "estimate_reason": "Why estimated",
+            "confidence": "gpovalues confidence",
+            "actual_value": "Observed gpovalues value",
+            "predicted_value": "Model-derived estimate",
+            "tier_tier": "Tier",
+            "category": "Category",
+            "obtainability": "Obtainability",
+        }
+    )
+    st.dataframe(
+        estimate_table,
+        hide_index=True,
+        width="stretch",
+        height=420,
+        column_config={
+            "Name": st.column_config.TextColumn("Name", width="large"),
+            "Why estimated": st.column_config.TextColumn("Why estimated"),
+            "gpovalues confidence": st.column_config.TextColumn("gpovalues confidence"),
+            "Observed gpovalues value": st.column_config.NumberColumn("Observed gpovalues value", format="localized"),
+            "Model-derived estimate": st.column_config.NumberColumn("Model-derived estimate", format="localized"),
+            "Tier": st.column_config.TextColumn("Tier"),
+            "Category": st.column_config.TextColumn("Category"),
+            "Obtainability": st.column_config.TextColumn("Obtainability"),
+        },
+    )
+    _notice(
+        "These rows are model-derived estimates, not observed gpovalues values. Use them as directional context only."
+    )
 
 
 def render_value_list(df: pd.DataFrame) -> None:
