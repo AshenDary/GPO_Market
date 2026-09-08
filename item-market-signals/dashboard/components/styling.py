@@ -217,6 +217,14 @@ def apply_dashboard_style() -> None:
             padding: 1rem;
         }
 
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: var(--surface);
+            border-color: var(--border);
+            border-radius: 0;
+            margin: 1rem 0 0;
+            padding: 1rem;
+        }
+
         .lookup-hero {
             align-items: stretch;
             background: var(--surface);
