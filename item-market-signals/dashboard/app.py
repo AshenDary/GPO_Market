@@ -18,13 +18,13 @@ from dashboard.components.layout import render_footer
 
 
 NAV_PAGES = [
-    st.Page("pages/overview.py", title="Overview", icon=":material/dashboard:", default=True),
+    st.Page("pages/overview.py", title="Overview", icon=":material/dashboard:"),
     st.Page("pages/lookup.py", title="Item lookup", icon=":material/search:"),
     st.Page("pages/simulator.py", title="Trade Simulator", icon=":material/swap_horiz:"),
     st.Page("pages/model_insights.py", title="Model Insights", icon=":material/analytics:"),
     st.Page("pages/trend.py", title="Trend", icon=":material/show_chart:"),
     st.Page("pages/value_list.py", title="Value List", icon=":material/table:"),
-    st.Page("pages/guide.py", title="How it works", icon=":material/info:"),
+    st.Page("pages/guide.py", title="Start Here", icon=":material/info:", default=True),
 ]
 
 REPO_URL = "https://github.com/AshenDary/GPO_Market.git"
