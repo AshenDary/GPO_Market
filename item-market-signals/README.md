@@ -9,8 +9,8 @@ buy, fair, or overpriced signals.
 The project exposes two user-facing interfaces:
 
 - CLI evaluator (`market_signals.evaluator.evaluate`)
-- Streamlit dashboard (`dashboard/app.py`) with Overview, Item lookup, Trade
-   Simulator, Trend, Value List, and How it works views
+- Streamlit dashboard (`dashboard/app.py`) with Start Here, Overview, Item
+   Lookup, Trade Simulator, Trend, Value List, and Model Insights views
 
 See `CONTEXT.md` for the current architecture and `ROADMAP.md` for planned
 improvements.
@@ -69,6 +69,9 @@ fixture, not the live network):
 pytest
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow,
+testing expectations, and data-refresh boundaries.
+
 Run the dashboard:
 
 ```bash
@@ -97,6 +100,7 @@ observations to show a trend line.
 ```
 item-market-signals/
 ├── README.md
+├── CONTRIBUTING.md
 ├── ROADMAP.md                       # phase-by-phase project plan
 ├── requirements.txt
 ├── .gitignore, .env.example, pyproject.toml, conftest.py

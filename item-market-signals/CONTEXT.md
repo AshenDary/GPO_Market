@@ -54,6 +54,7 @@ dashboard/
     trend.py                  trend history page
     value_list.py             searchable full value catalog
     guide.py                  first-visit explainer page
+    model_insights.py         structural model diagnostics page
   components/
     data.py                   cached loaders + pipeline reuse for dashboard pages
     views.py                  overview/lookup/simulator/trend/value-list rendering and charting
@@ -99,15 +100,15 @@ because the tier parser needs it; other raw JSON pulls remain ignored.
 
 The core product is implemented on `main`: the ingestion pipeline, feature
 builder, CLI evaluator, and Streamlit dashboard work together. The dashboard
-currently provides Overview, Item lookup, Trade Simulator, Trend, Value List,
-and How it works views. Multiple dated snapshots are available, so project-
-level and sufficiently observed item-level trends can be shown.
+currently provides Start Here, Overview, Item Lookup, Trade Simulator, Trend,
+Value List, and Model Insights views. Multiple dated snapshots are available,
+so project-level and sufficiently observed item-level trends can be shown.
 
 Current work is validation and refinement: checking snapshot freshness and
-trend behavior against real data, improving UI/UX, and deciding which
-roadmap items should follow. The trend model is intentionally guarded by
-minimum history and currently reports a first-to-last change rather than a
-more robust regression-based trend.
+trend behavior against real data, improving UI/UX, and packaging the project
+for contributors. The trend model is intentionally guarded by minimum history
+and currently reports a first-to-last change rather than a more robust
+regression-based trend.
 
 ## Design principles (don't violate these when extending the code)
 
