@@ -267,6 +267,13 @@ def apply_dashboard_style() -> None:
             padding: 1rem;
         }
 
+        .verdict-panel--prominent {
+            border-width: 3px;
+            margin: 0.25rem 0 1.5rem;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
         .verdict-kicker {
             color: var(--muted);
             font-size: 0.78rem;
@@ -280,6 +287,11 @@ def apply_dashboard_style() -> None:
             font-weight: 700;
             line-height: 1.15;
             margin-top: 0.35rem;
+        }
+
+        .verdict-panel--prominent .verdict-title {
+            font-size: 2.8rem;
+            font-weight: 700;
         }
 
         .quick-picks {
@@ -320,45 +332,107 @@ def apply_dashboard_style() -> None:
             margin-bottom: 0.5rem;
         }
 
-        .trade-row {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            margin: 0.55rem 0;
-            min-height: 86px;
-            padding: 0.85rem 1rem;
+        .trade-card {
+            min-height: 210px;
+            position: relative;
         }
 
-        .trade-row--unpriced {
+        .trade-card--unpriced {
+            border: 1px dashed var(--ink);
+            margin: -1rem;
+            min-height: 210px;
+            padding: 1rem;
+        }
+
+        .trade-card-image {
+            align-items: center;
             background: var(--bg);
-            border-style: dashed;
+            border: 1px solid var(--border);
+            display: flex;
+            height: 112px;
+            justify-content: center;
+            margin-bottom: 0.8rem;
+            overflow: hidden;
         }
 
-        .trade-row-name {
+        .trade-card-image img {
+            display: block;
+            height: 96px;
+            max-width: 96px;
+            object-fit: contain;
+            width: 96px;
+        }
+
+        .trade-card-value {
+            background: var(--ink);
+            color: var(--bg);
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding: 0.32rem 0.45rem;
+            position: absolute;
+            right: 0;
+            top: 0;
+        }
+
+        .trade-card-name {
             color: var(--ink);
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 700;
             line-height: 1.25;
             overflow-wrap: anywhere;
         }
 
-        .trade-row-value {
-            align-items: center;
-            color: var(--ink);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
+        .trade-card-meta,
+        .trade-card-caveat,
+        .trade-context-copy,
+        .trade-context-side {
+            color: var(--muted);
+            font-size: 0.76rem;
+            line-height: 1.4;
             margin-top: 0.35rem;
         }
 
-        .trade-row-meta,
-        .trade-caveat {
-            color: var(--muted);
-            font-size: 0.78rem;
-            margin-top: 0.3rem;
+        .trade-card-caveat {
+            color: var(--ink);
         }
 
-        .trade-caveat {
+        .trade-add-card {
+            align-items: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 210px;
+            text-align: center;
+        }
+
+        .trade-add-symbol {
+            border: 1px solid var(--muted);
             color: var(--ink);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 2.2rem;
+            height: 3.3rem;
+            line-height: 3rem;
+            margin-bottom: 0.8rem;
+            width: 3.3rem;
+        }
+
+        .trade-context-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            margin: 0.65rem 0;
+            padding: 0.85rem 1rem;
+        }
+
+        .trade-context-name {
+            color: var(--ink);
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .trade-context-side {
+            border-left: 1px solid var(--border);
+            margin-left: 0.5rem;
+            padding-left: 0.5rem;
         }
 
         .pill-badge {
@@ -581,7 +655,7 @@ def apply_dashboard_style() -> None:
             }
 
             .verdict-title {
-                font-size: 1.5rem;
+                font-size: 1.85rem;
             }
 
             .bar-row {
