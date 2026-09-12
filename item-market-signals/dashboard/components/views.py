@@ -212,10 +212,11 @@ def _image_html(image_url: object) -> str:
     return '<span class="item-image-placeholder">NO IMAGE</span>'
 
 
-def _render_verdict_message(kicker: str, title: str) -> None:
+def _render_verdict_message(kicker: str, title: str, *, prominent: bool = False) -> None:
+    panel_class = "verdict-panel verdict-panel--prominent" if prominent else "verdict-panel"
     st.markdown(
         (
-            '<div class="verdict-panel">'
+            f'<div class="{panel_class}">'
             f'<div class="verdict-kicker">{escape(kicker)}</div>'
             f'<div class="verdict-title">{escape(title)}</div>'
             '</div>'
@@ -569,12 +570,17 @@ def _trade_state_key(side_key: str) -> str:
     return f"trade_simulator_{side_key}_items"
 
 
+TRADE_DIALOG_STATE_KEY = "trade_simulator_active_dialog"
+
+
 def _make_priced_trade_item(row: pd.Series) -> dict[str, object]:
     return {
         "id": f"priced-{uuid4().hex}",
         "priced": True,
         "join_key": str(row["join_key"]),
         "name": str(row["name"]),
+        "image_url": row.get("image_url"),
+        "quantity": 1,
         "value": _as_float(row["value"]),
         "ci_low": _as_float(row["ci_low"]),
         "ci_high": _as_float(row["ci_high"]),
@@ -587,6 +593,8 @@ def _make_unpriced_trade_item(name: str) -> dict[str, object]:
         "id": f"unpriced-{uuid4().hex}",
         "priced": False,
         "name": name,
+        "image_url": None,
+        "quantity": 1,
         "value": None,
         "ci_low": None,
         "ci_high": None,
@@ -628,49 +636,88 @@ def _sum_trade_items(items: list[dict[str, object]]) -> dict[str, float | int]:
     }
 
 
-def _render_trade_row(side_key: str, item: dict[str, object]) -> None:
-    row_class = "trade-row trade-row--unpriced" if not item.get("priced") else "trade-row"
+def _render_trade_card(side_key: str, item: dict[str, object]) -> None:
+    card_class = "trade-card trade-card--unpriced" if not item.get("priced") else "trade-card"
     name = escape(str(item["name"]))
     confidence = str(item.get("confidence", "unknown"))
+    quantity = int(item.get("quantity", 1))
+    image = _image_html(item.get("image_url"))
 
     if item.get("priced"):
         value_text = _format_value(item.get("value"))
-        range_text = f"{_format_value(item.get('ci_low'))} - {_format_value(item.get('ci_high'))}"
-        confidence_badge = _badge_html(confidence, confidence.lower())
-        caveat = f'<div class="trade-caveat">{escape(LOW_CONFIDENCE_CAVEAT)}</div>' if confidence == "low" else ""
-        detail = (
-            f'<div class="trade-row-value"><span class="num">{escape(value_text)}</span>{confidence_badge}</div>'
-            f'<div class="trade-row-meta">Approx range <span class="num">{escape(range_text)}</span></div>{caveat}'
-        )
+        value_badge = f'<span class="trade-card-value num">{escape(value_text)}</span>'
+        detail = f'<div class="trade-card-meta">Qty {quantity} / {escape(confidence)} confidence</div>'
+        if confidence == "low":
+            detail += f'<div class="trade-card-caveat">{escape(LOW_CONFIDENCE_CAVEAT)}</div>'
     else:
-        detail = (
-            f'<div class="trade-row-value">{_badge_html("no value data", "unpriced")}</div>'
-            '<div class="trade-row-meta">Excluded from subtotals.</div>'
-        )
+        value_badge = _badge_html("NO VALUE DATA", "unpriced")
+        detail = f'<div class="trade-card-meta">Qty {quantity} / excluded from subtotal</div>'
 
-    row_cols = st.columns([0.78, 0.22], vertical_alignment="center")
-    with row_cols[0]:
+    st.markdown(
+        (
+            f'<div class="{card_class}">'
+            f'<div class="trade-card-image">{image}</div>'
+            f'{value_badge}'
+            f'<div class="trade-card-name">{name}</div>'
+            f'{detail}</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        "Remove",
+        key=f"remove_{side_key}_{item['id']}",
+        icon=":material/delete:",
+        width="stretch",
+    ):
+        state_key = _trade_state_key(side_key)
+        st.session_state[state_key] = [
+            saved_item
+            for saved_item in st.session_state[state_key]
+            if saved_item["id"] != item["id"]
+        ]
+        st.rerun()
+
+
+def _close_trade_dialog() -> None:
+    st.session_state.pop(TRADE_DIALOG_STATE_KEY, None)
+
+
+@st.dialog("Add trade item", width="small", on_dismiss=_close_trade_dialog)
+def _render_add_item_dialog(df: pd.DataFrame, title: str, side_key: str) -> None:
+    """Add one item to a trade side, then rerun to close the dialog."""
+    st.markdown(f"<p class='item-meta'>Add an item to {escape(title.lower())}.</p>", unsafe_allow_html=True)
+    selected = render_item_picker(
+        df,
+        f"{side_key}_dialog_item_picker",
+        label="Search items",
+        allow_new_options=True,
+        default_to_first=False,
+    )
+    if st.button("Add item", key=f"dialog_add_{side_key}", icon=":material/add:", width="stretch"):
+        item, message = _resolve_trade_item(df, str(selected or ""))
+        if message is not None:
+            st.warning(message)
+        elif item is not None:
+            st.session_state[_trade_state_key(side_key)].append(item)
+            st.session_state.pop(TRADE_DIALOG_STATE_KEY, None)
+            st.rerun()
+
+
+def _render_add_card(df: pd.DataFrame, title: str, side_key: str) -> None:
+    with st.container(border=True):
         st.markdown(
-            (
-                f'<div class="{row_class}">'
-                f'<div class="trade-row-name">{name}</div>'
-                f"{detail}</div>"
-            ),
+            '<div class="trade-add-card"><div class="trade-add-symbol">+</div>'
+            '<div class="trade-card-name">Add item</div>'
+            '<div class="trade-card-meta">Search the catalog</div></div>',
             unsafe_allow_html=True,
         )
-    with row_cols[1]:
         if st.button(
-            "Remove",
-            key=f"remove_{side_key}_{item['id']}",
-            icon=":material/delete:",
+            "Add item",
+            key=f"open_trade_dialog_{side_key}",
+            icon=":material/add:",
             width="stretch",
         ):
-            state_key = _trade_state_key(side_key)
-            st.session_state[state_key] = [
-                saved_item
-                for saved_item in st.session_state[state_key]
-                if saved_item["id"] != item["id"]
-            ]
+            st.session_state[TRADE_DIALOG_STATE_KEY] = side_key
             st.rerun()
 
 
@@ -679,21 +726,6 @@ def _render_trade_panel(df: pd.DataFrame, title: str, side_key: str) -> dict[str
     st.session_state.setdefault(state_key, [])
 
     _section_title(title)
-    selected = render_item_picker(
-        df,
-        f"{side_key}_item_picker",
-        label=f"Add to {title}",
-        allow_new_options=True,
-        default_to_first=False,
-    )
-    if st.button("Add item", key=f"add_{side_key}", icon=":material/add:", width="stretch"):
-        item, message = _resolve_trade_item(df, str(selected or ""))
-        if message is not None:
-            st.warning(message)
-        elif item is not None:
-            st.session_state[state_key].append(item)
-            st.rerun()
-
     items = st.session_state[state_key]
     subtotal = _sum_trade_items(items)
     render_metric_cards(
@@ -706,20 +738,85 @@ def _render_trade_panel(df: pd.DataFrame, title: str, side_key: str) -> dict[str
     )
     _notice("Approximate range is a simple sum of each priced item's low/high bounds, not a combined confidence interval.")
 
-    if not items:
-        _notice(f"Add items to {title.lower()} to start comparing the trade.")
-        return subtotal
-
-    for item in items:
-        _render_trade_row(side_key, item)
+    entries: list[tuple[str, dict[str, object] | None]] = [
+        ("item", item) for item in items
+    ] + [("add", None)]
+    for row_start in range(0, len(entries), 4):
+        row_entries = entries[row_start : row_start + 4]
+        cards = st.columns(len(row_entries))
+        for card, (entry_type, item) in zip(cards, row_entries):
+            with card:
+                if entry_type == "item" and item is not None:
+                    _render_trade_card(side_key, item)
+                else:
+                    _render_add_card(df, title, side_key)
 
     if subtotal["unpriced_count"]:
         _notice(f"{subtotal['unpriced_count']} unpriced item(s) are shown but excluded from this side's subtotal.")
     return subtotal
 
 
-def render_trade_simulator(df: pd.DataFrame) -> None:
+def _render_trade_context(
+    items_by_side: list[tuple[str, dict[str, object]]],
+    df: pd.DataFrame,
+    value_model: ValueRegressionResult | None,
+) -> None:
+    priced_items = [(side, item) for side, item in items_by_side if item.get("priced")]
+    if not priced_items:
+        return
+
+    _section_title("Trade context")
+    _notice("Historical market movement and structural model findings for items currently in this trade.")
+
+    scored_by_key: dict[str, pd.Series] = {}
+    if value_model is not None:
+        scored = score_actual_values(value_model, df)
+        scored_by_key = {
+            str(row["join_key"]): row
+            for _, row in scored.iterrows()
+            if pd.notna(row.get("join_key"))
+        }
+
+    for side, item in priced_items:
+        name = str(item["name"])
+        side_label = "You give" if side == "give" else "You get"
+        trend = compute_trend(str(item["join_key"]))
+        if trend is None:
+            trend_text = f"Historical trend: not enough snapshot history yet for {name}."
+        else:
+            trend_text = (
+                f"Historical trend: {trend['direction']} {trend['pct_change']:+.1f}% over "
+                f"{trend['n_snapshots']} snapshots ({trend['first_date']} to {trend['last_date']})."
+            )
+
+        model_row = scored_by_key.get(str(item["join_key"]))
+        model_text = ""
+        if model_row is not None and bool(model_row.get("notable_structural_residual", False)):
+            model_text = f" Model context: {model_row['structural_note']}"
+
+        st.markdown(
+            (
+                '<div class="trade-context-item">'
+                f'<div class="trade-context-name">{escape(name)} <span class="trade-context-side">{escape(side_label)}</span></div>'
+                f'<div class="trade-context-copy">{escape(trend_text)}{escape(model_text)}</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def render_trade_simulator(
+    df: pd.DataFrame,
+    value_model: ValueRegressionResult | None = None,
+) -> None:
     _section_title("Trade Simulator")
+
+    st.session_state.setdefault(_trade_state_key("give"), [])
+    st.session_state.setdefault(_trade_state_key("get"), [])
+    active_dialog_side = st.session_state.get(TRADE_DIALOG_STATE_KEY)
+    if active_dialog_side in {"give", "get"}:
+        dialog_title = "You Give" if active_dialog_side == "give" else "You Get"
+        _render_add_item_dialog(df, dialog_title, active_dialog_side)
 
     verdict_slot = st.container()
     give_col, get_col = st.columns(2)
@@ -730,21 +827,26 @@ def render_trade_simulator(df: pd.DataFrame) -> None:
 
     give_items = st.session_state.get(_trade_state_key("give"), [])
     get_items = st.session_state.get(_trade_state_key("get"), [])
-    with verdict_slot:
-        if not give_items or not get_items:
-            _render_verdict_message("Trade verdict", "Add at least one item to both sides.")
-            return
+    verdict_title = "Add at least one item to both sides."
+    if give_items and get_items:
         if give_total["priced_count"] == 0 or get_total["priced_count"] == 0:
-            _render_verdict_message("Trade verdict", "Add at least one priced item to both sides for a value verdict.")
-            return
+            verdict_title = "Add at least one priced item to both sides for a value verdict."
+        else:
+            verdict_title = trade_range_verdict(
+                float(give_total["ci_low"]),
+                float(give_total["ci_high"]),
+                float(get_total["ci_low"]),
+                float(get_total["ci_high"]),
+            )
 
-        verdict_text = trade_range_verdict(
-            float(give_total["ci_low"]),
-            float(give_total["ci_high"]),
-            float(get_total["ci_low"]),
-            float(get_total["ci_high"]),
-        )
-        _render_verdict_message("Trade verdict", verdict_text)
+    with verdict_slot:
+        _render_verdict_message("Trade verdict", verdict_title, prominent=True)
+
+    _render_trade_context(
+        [("give", item) for item in give_items] + [("get", item) for item in get_items],
+        df,
+        value_model,
+    )
 
 
 def render_model_insights(
