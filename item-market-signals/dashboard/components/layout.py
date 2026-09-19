@@ -35,6 +35,7 @@ def render_refresh_button(key: str) -> None:
     with refresh_col:
         if st.button("Refresh data", key=key):
             st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
 
 

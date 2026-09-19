@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 import warnings
 
 import numpy as np
@@ -68,6 +68,14 @@ class ValueRegressionResult:
     residual_std_log: float
     feature_names: list[str]
     selection_note: str
+
+
+@dataclass(frozen=True)
+class ValueShapExplanation:
+    base_value_log: float
+    prediction_log: float
+    predicted_value: float
+    contributions: pd.DataFrame
 
 
 def _latest(pattern: str, snapshot_dir: Path = SNAPSHOT_DIR) -> Path:
@@ -196,6 +204,64 @@ def predict_value(model: ValueRegressionResult, item_features: Mapping[str, obje
     return float(np.exp(prediction_log))
 
 
+def build_value_explainer(model: ValueRegressionResult) -> Any:
+    """Build a SHAP tree explainer for the already-trained random forest."""
+    estimator = model.pipeline.named_steps["model"]
+    if not isinstance(estimator, RandomForestRegressor):
+        raise TypeError("SHAP TreeExplainer is only wired for the selected RandomForestRegressor model.")
+
+    import shap
+
+    return shap.TreeExplainer(estimator)
+
+
+def explain_value_prediction(
+    model: ValueRegressionResult,
+    item_features: Mapping[str, object] | pd.Series,
+    explainer: Any | None = None,
+) -> ValueShapExplanation:
+    """Explain one model prediction in log-value space with per-feature SHAP values."""
+    row = pd.DataFrame([dict(item_features)])
+    encoded = encode_feature_frame(model, row)
+    value_explainer = explainer or build_value_explainer(model)
+    raw_shap_values = value_explainer.shap_values(encoded)
+
+    if isinstance(raw_shap_values, list):
+        raw_shap_values = raw_shap_values[0]
+    shap_values = np.asarray(raw_shap_values, dtype=float)
+    if shap_values.ndim == 1:
+        row_values = shap_values
+    else:
+        row_values = shap_values[0]
+
+    expected_value = np.asarray(value_explainer.expected_value, dtype=float).reshape(-1)[0]
+    base_value_log = float(expected_value)
+    prediction_log = float(model.pipeline.named_steps["model"].predict(encoded.to_numpy())[0])
+    contributions = (
+        pd.DataFrame(
+            {
+                "feature": [_clean_feature_name(name) for name in model.feature_names],
+                "shap_value_log": row_values,
+                "abs_shap_value_log": np.abs(row_values),
+            }
+        )
+        .sort_values("abs_shap_value_log", ascending=False)
+        .reset_index(drop=True)
+    )
+    contributions["direction"] = np.where(
+        contributions["shap_value_log"] >= 0,
+        "pushes prediction up",
+        "pushes prediction down",
+    )
+
+    return ValueShapExplanation(
+        base_value_log=base_value_log,
+        prediction_log=prediction_log,
+        predicted_value=float(np.exp(prediction_log)),
+        contributions=contributions,
+    )
+
+
 def add_predictions(model: ValueRegressionResult, df: pd.DataFrame) -> pd.DataFrame:
     """Return a copy of df with model-derived predicted values."""
     scored = df.copy()
@@ -316,7 +382,9 @@ def feature_importance(model: ValueRegressionResult) -> pd.DataFrame:
 
 def encode_feature_frame(model: ValueRegressionResult, df: pd.DataFrame) -> pd.DataFrame:
     """Expose the fitted encoder output for tests and diagnostics."""
-    encoded = model.pipeline.named_steps["preprocessor"].transform(prepare_feature_frame(df))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Found unknown categories")
+        encoded = model.pipeline.named_steps["preprocessor"].transform(prepare_feature_frame(df))
     return pd.DataFrame(encoded, columns=model.feature_names, index=df.index)
 
 

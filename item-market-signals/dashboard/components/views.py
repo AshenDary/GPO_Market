@@ -23,9 +23,11 @@ from market_signals.evaluator.evaluate import (
 )
 from market_signals.models.trend_model import MIN_SNAPSHOTS, compute_trend
 from market_signals.models.value_regression import (
+    ValueShapExplanation,
     ValueRegressionResult,
     build_model_estimates,
     estimate_item_by_name,
+    explain_value_prediction,
     feature_importance,
     predict_value,
     score_actual_values,
@@ -805,6 +807,111 @@ def _render_trade_context(
         )
 
 
+def _pretty_feature_name(feature: str) -> str:
+    labels = {
+        "tier_ordinal": "Tier rank",
+        "sub_tier_ordinal": "Sub-tier rank",
+        "demand_ordinal": "Demand label",
+        "demand_ratio": "Demand ratio",
+        "is_unstable": "Unstable flag",
+        "is_unobtainable": "Unobtainable flag",
+    }
+    if feature in labels:
+        return labels[feature]
+    if feature.startswith("category_"):
+        return f"Category: {feature.removeprefix('category_')}"
+    if feature.startswith("obtainability_"):
+        return f"Obtainability: {feature.removeprefix('obtainability_')}"
+    return feature.replace("_", " ").title()
+
+
+def _shap_driver_sentence(explanation: ValueShapExplanation, limit: int = 3) -> str:
+    drivers = explanation.contributions[explanation.contributions["abs_shap_value_log"] > 0].head(limit)
+    if drivers.empty:
+        return "No single structural feature strongly changed the model prediction for this item."
+
+    parts = []
+    for _, driver in drivers.iterrows():
+        direction = "up" if float(driver["shap_value_log"]) > 0 else "down"
+        parts.append(f"{_pretty_feature_name(str(driver['feature']))} ({direction})")
+    return "Strongest structural drivers: " + ", ".join(parts) + "."
+
+
+def _render_shap_breakdown(
+    value_model: ValueRegressionResult,
+    value_explainer: object,
+    row: pd.Series,
+) -> None:
+    explanation = explain_value_prediction(value_model, row, value_explainer)
+    actual_value = _as_float(row.get("actual_value", row.get("value")))
+    residual = _as_float(row.get("log_residual"))
+    residual_direction = "above" if residual is not None and residual > 0 else "below"
+
+    _section_title(f"{row['name']} SHAP Breakdown")
+    render_metric_cards(
+        [
+            ("Model predicted value", _format_value(explanation.predicted_value)),
+            ("Actual gpovalues value", _format_value(actual_value)),
+            ("Prediction, log scale", f"{explanation.prediction_log:.3f}"),
+            ("Explainer base, log scale", f"{explanation.base_value_log:.3f}"),
+        ],
+        class_name="metric-grid--three",
+    )
+    _notice(
+        "The model predicts log(value). The headline prediction is converted back to value units, "
+        "but the SHAP bars are log-space relative contributions, not currency deltas."
+    )
+    if bool(row.get("notable_structural_residual", False)):
+        _notice(
+            f"Actual value is {residual_direction} the model's structural expectation. "
+            f"{_shap_driver_sentence(explanation)} The remaining actual-vs-predicted gap is the residual."
+        )
+
+    plot_df = explanation.contributions.head(12).copy()
+    plot_df["label"] = plot_df["feature"].map(_pretty_feature_name)
+    plot_df = plot_df.sort_values("shap_value_log", ascending=True)
+    colors = [
+        "#F2F2F0" if value >= 0 else "#8C8C8C"
+        for value in plot_df["shap_value_log"]
+    ]
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=plot_df["shap_value_log"],
+                y=plot_df["label"],
+                orientation="h",
+                marker={"color": colors, "line": {"color": PALETTE["border"], "width": 1}},
+                hovertemplate="Feature: %{y}<br>SHAP log contribution: %{x:.3f}<extra></extra>",
+            )
+        ]
+    )
+    fig.add_vline(x=0, line_width=1, line_color=PALETTE["muted"])
+    fig.update_layout(
+        paper_bgcolor=PALETTE["bg"],
+        plot_bgcolor=PALETTE["bg"],
+        font={"color": PALETTE["muted"], "family": "IBM Plex Sans"},
+        hoverlabel={
+            "bgcolor": PALETTE["surface"],
+            "bordercolor": PALETTE["border"],
+            "font_color": PALETTE["ink"],
+        },
+        margin={"l": 20, "r": 20, "t": 20, "b": 36},
+        xaxis={
+            "title": {"text": "SHAP contribution to log(value)", "font": {"color": PALETTE["muted"]}},
+            "gridcolor": PALETTE["border"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+        },
+        yaxis={
+            "title": "",
+            "gridcolor": PALETTE["bg"],
+            "linecolor": PALETTE["border"],
+            "tickfont": {"color": PALETTE["muted"]},
+        },
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
 def render_trade_simulator(
     df: pd.DataFrame,
     value_model: ValueRegressionResult | None = None,
@@ -853,6 +960,7 @@ def render_model_insights(
     df: pd.DataFrame,
     value_model: ValueRegressionResult,
     tier_reference: pd.DataFrame,
+    value_explainer: object,
 ) -> None:
     _section_title("Model Insights")
 
@@ -918,11 +1026,14 @@ def render_model_insights(
             "structural_note": "Note",
         }
     )
-    st.dataframe(
+    selection = st.dataframe(
         anomaly_table,
         hide_index=True,
         width="stretch",
         height=520,
+        selection_mode="single-row",
+        on_select="rerun",
+        key="model_insights_anomaly_table",
         column_config={
             "Name": st.column_config.TextColumn("Name", width="large"),
             "Confidence": st.column_config.TextColumn("Confidence"),
@@ -938,6 +1049,11 @@ def render_model_insights(
         "Notable rows are priced differently than similar items by tier/category, or are not well-explained "
         "by structural features alone. This is a curiosity flag, not a correction to gpovalues."
     )
+    selected_rows = getattr(getattr(selection, "selection", None), "rows", [])
+    if selected_rows:
+        _render_shap_breakdown(value_model, value_explainer, scored.iloc[selected_rows[0]])
+    else:
+        _notice("Select a row above to inspect its log-space SHAP breakdown.")
 
     _section_title("Model-Derived Estimates")
     estimates = build_model_estimates(value_model, df, tier_reference)

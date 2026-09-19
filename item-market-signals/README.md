@@ -1,160 +1,172 @@
 # item-market-signals
 
 Item Market Signals is a market intelligence dashboard and evaluator for the
-Grand Piece Online trading economy. It pulls continuously updated community
-values from gpovalues.com, enriches them with tier, rarity, and obtainability
-context, tracks dated market snapshots, and turns asking prices into practical
-buy, fair, or overpriced signals.
+Grand Piece Online trading economy. It pulls community-solved values from
+gpovalues.com, enriches them with curated tier/rarity context, preserves dated
+snapshots, and turns the data into practical item lookup, trade comparison,
+trend, and model-diagnostic views.
 
-The project exposes two user-facing interfaces:
+The project is both a daily-use tool and a portfolio project. The guiding rule
+is simple: observed market values are treated as observed values, model-derived
+estimates are labeled as model-derived, and uncertainty is shown plainly.
 
-- CLI evaluator (`market_signals.evaluator.evaluate`)
-- Streamlit dashboard (`dashboard/app.py`) with Start Here, Overview, Item
-   Lookup, Trade Simulator, Trend, Value List, and Model Insights views
+## Features
 
-See `CONTEXT.md` for the current architecture and `ROADMAP.md` for planned
-improvements.
-
-## Data sources
-
-1. **[gpovalues.com](https://gpovalues.com)** (primary, real prices) --
-   a fan-built API solving item values from ~29,000 observed Discord
-   trades, with confidence intervals and trade-count-driven confidence
-   labels. See their
-   [methodology](https://gpovalues.com/legal/methodology) for exactly how.
-   No personal trade log needed -- this is real market data, not self-reported.
-2. **Tier/rarity reference JSON** (secondary, structural) -- category,
-   obtainability, rarity used to enrich items and cross-check the tier list
-   against what the market actually pays.
+- gpovalues.com API ingestion into dated `gpovalues_*.csv` snapshots
+- curated tier/rarity JSON parsing into dated `tier_reference_*.csv` snapshots
+- merged feature matrix using exact item-name match, then shortcut/alias match
+- Typer CLI for quick fair-value and asking-price checks
+- Streamlit dashboard with:
+  - **Start Here** - dashboard directory and signal explanations
+  - **Overview** - coverage, confidence counts, tier/value scatter, most-traded items
+  - **Item lookup** - one-item value, confidence band, asking-price verdict
+  - **Trade Simulator** - compare items on both sides of a proposed trade
+  - **Model Insights** - regression diagnostics, anomaly table, SHAP breakdowns
+  - **Trend** - item value movement across dated snapshots
+  - **Value List** - searchable full value catalog
+- Structural value regression trained on medium/high-confidence rows for
+  low-confidence and tier-only context
+- SHAP TreeExplainer support for the selected RandomForestRegressor, shown as
+  log-space relative feature contributions rather than fake currency deltas
+- Offline tests using fixtures instead of live network calls
 
 ## Setup
 
+Most commands should be run from this project folder:
+
 ```bash
+cd item-market-signals
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pip install -e .        # makes `config` and `market_signals` importable anywhere
+pip install -e .
 ```
 
-Pull the current market values:
+The editable install makes both `config` and `market_signals` importable from
+the `src/` layout.
+
+Run tests:
+
+```bash
+pytest
+```
+
+Tests are offline. Live gpovalues ingestion needs network access, but parser,
+feature, trend, simulator, and model logic are tested against fixtures.
+
+## Run the pipeline
+
+Pull current gpovalues data:
 
 ```bash
 python scripts/run_ingest_gpovalues.py
 ```
 
-Parse the structural reference data (drop a raw tier-list JSON into
-`data/raw/` first):
+Parse the curated tier reference:
 
 ```bash
 python scripts/run_ingest_tier.py
 ```
 
-Merge them into one feature matrix:
+Merge the latest snapshots into the dashboard/CLI feature matrix:
 
 ```bash
 python scripts/run_feature_build.py
 ```
 
-Check an item:
+Each ingestion run writes a dated snapshot instead of overwriting the previous
+one. Trend views become more useful as snapshot history accumulates.
+
+## Use the CLI
 
 ```bash
 python -m market_signals.evaluator.evaluate "Prestige Candy Cane"
 python -m market_signals.evaluator.evaluate "Candy Cane" --asking-price 300000
 ```
 
-Run tests (fully offline -- gpovalues ingestion is tested against a saved
-fixture, not the live network):
+Typer treats this as a single-command app, so there is no `check` subcommand in
+the invocation.
 
-```bash
-pytest
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow,
-testing expectations, and data-refresh boundaries.
-
-Run the dashboard:
+## Run the dashboard
 
 ```bash
 streamlit run dashboard/app.py
 ```
 
-Dashboard data loaders use a 1-hour cache. Use the sidebar `Refresh data`
-button after running ingest/build scripts if you want the UI to pick up the
-latest snapshots immediately.
+The dashboard uses cached data/model loaders. If you run ingestion scripts while
+the app is open, use the page `Refresh data` button. On hosted Streamlit Cloud,
+dependency/runtime changes may require a manual app reboot after pushing.
 
-### Building snapshot history
+Local launcher files are also included:
 
-The trend feature needs multiple dated snapshots. Run
-`run_ingest_gpovalues.py` daily -- a simple cron entry works fine:
-
-```
-0 9 * * * cd /path/to/item-market-signals && .venv/bin/python scripts/run_ingest_gpovalues.py
-```
-
-Trend is currently available at the project level because multiple dated
-snapshots already exist. Individual items still require at least two
-observations to show a trend line.
+- `run_dashboard.command` for macOS
+- `run_dashboard.bat` for Windows
 
 ## File structure
 
-```
+```text
 item-market-signals/
-├── README.md
-├── CONTRIBUTING.md
-├── ROADMAP.md                       # phase-by-phase project plan
-├── requirements.txt
-├── .gitignore, .env.example, pyproject.toml, conftest.py
-├── data/
-│   ├── raw/                         # curated tier dataset + optional raw pulls
-│   └── snapshots/                   # dated gpovalues_*.csv + tier_reference_*.csv
-├── src/
-│   ├── config/
-│   │   └── settings.py              # paths, ordinal encodings, API url -- single source of truth
-│   └── market_signals/
-│       ├── ingest/
-│       │   ├── pull_gpovalues_snapshot.py   # PRIMARY: live API -> dated snapshot
-│       │   └── parse_tier_dataset.py        # SECONDARY: raw JSON -> tier_reference snapshot
-│       ├── features/
-│       │   └── build_feature_matrix.py      # merges the two into one table
-│       ├── models/
-│       │   └── trend_model.py               # value trend across snapshot history
-│       └── evaluator/
-│           └── evaluate.py                  # the actual buy/pass CLI tool
-├── scripts/
-│   ├── run_ingest_gpovalues.py
-│   ├── run_ingest_tier.py
-│   └── run_feature_build.py
-├── notebooks/
-│   └── 01_eda_baseline.ipynb
-├── tests/
-│   ├── fixtures/sample_gpovalues_response.json   # real (trimmed) API sample, offline testing
-│   ├── test_pull_gpovalues_snapshot.py
-│   └── test_parse_tier_dataset.py
-└── outputs/                         # feature_matrix_master.csv and helpers
+  README.md
+  CONTEXT.md
+  ROADMAP.md
+  SKILLS.md
+  pyproject.toml
+  requirements.txt
+  dashboard/
+    app.py
+    pages/
+      guide.py
+      overview.py
+      lookup.py
+      simulator.py
+      model_insights.py
+      trend.py
+      value_list.py
+    components/
+      data.py
+      layout.py
+      styling.py
+      views.py
+    assets/strawhat_favicon.png
+  data/
+    raw/gpo_market_dataset.json
+    snapshots/
+      gpovalues_*.csv
+      tier_reference_*.csv
+  outputs/
+    feature_matrix_master.csv
+  scripts/
+    run_ingest_gpovalues.py
+    run_ingest_tier.py
+    run_feature_build.py
+  src/
+    config/settings.py
+    market_signals/
+      ingest/
+      features/
+      models/
+      evaluator/
+      utils/
+  tests/
+    fixtures/
+    test_*.py
 ```
 
-## Architecture
+## Data and model notes
 
-Two data sources merge into one evaluator:
+gpovalues.com is the primary source for solved market values and confidence
+bands. The tier JSON is structural context only; it does not replace observed
+market prices.
 
-1. **gpovalues.com API** (`ingest/pull_gpovalues_snapshot.py`) -- real
-   solved values, confidence bands, demand, trade counts. Snapshotted daily
-   so `models/trend_model.py` can compute real trend once enough dates
-   accumulate (needs 2+ snapshot dates minimum, and honestly says so if you
-   don't have them yet).
-2. **Tier/rarity reference** (`ingest/parse_tier_dataset.py`) -- structural
-   enrichment only. Matched to gpovalues items by name, then by
-   shortcut/alias as a fallback. Unmatched items keep their real gpovalues
-   price and are just flagged as missing enrichment, not dropped.
+The value regression model predicts `log(value)`. The dashboard converts the
+final model prediction back to normal value units for readability, but SHAP
+feature contributions stay in log-space and are presented as relative drivers,
+not exact per-feature money amounts.
 
-`features/build_feature_matrix.py` merges the two.
-`evaluator/evaluate.py` is the actual user-facing tool: look up an item,
-optionally pass an asking price, get a fair value + confidence band + trend
-+ a plain verdict (good deal / fair / overpriced).
+## Current status
 
-## Renaming
-
-`item-market-signals` is a placeholder name -- swap it for whatever fits
-your portfolio, then also swap the `market_signals` import path if you
-change the package name (search-and-replace across `src/`, `scripts/`,
-`tests/`, and `notebooks/`).
+The ingestion pipeline, feature builder, CLI, dashboard, trade simulator,
+snapshot trend views, value regression, and SHAP explainability are working.
+The main deferred modeling work is richer trend forecasting once enough
+long-term snapshot history exists and refinement of structural features such as
+prestige/item-family signals.

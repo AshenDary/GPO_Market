@@ -7,6 +7,7 @@ import streamlit as st
 from dashboard.components.data import (
     load_feature_matrix,
     load_tier_reference,
+    load_value_explainer,
     load_value_regression_model,
 )
 from dashboard.components.layout import render_refresh_button
@@ -20,6 +21,7 @@ try:
     feature_matrix = load_feature_matrix()
     tier_reference = load_tier_reference()
     value_model = load_value_regression_model()
+    value_explainer = load_value_explainer(value_model)
 except FileNotFoundError as exc:
     st.error(str(exc))
     st.stop()
@@ -27,4 +29,4 @@ except InsufficientTrainingDataError as exc:
     st.warning(str(exc))
     st.stop()
 
-render_model_insights(feature_matrix, value_model, tier_reference)
+render_model_insights(feature_matrix, value_model, tier_reference, value_explainer)

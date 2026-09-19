@@ -3,6 +3,7 @@ pandas>=2.2
 numpy>=1.26
 requests>=2.31
 scikit-learn>=1.4
+shap>=0.46
 
 # CLI for the evaluator
 typer>=0.12

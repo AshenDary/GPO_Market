@@ -1,41 +1,77 @@
 # Roadmap
 
-Revised after dropping the personal trade log: real price data now comes
-from gpovalues.com (28,000+ observed trades, continuously updated), so
-Phases 0-2 are mostly data-plumbing, not data-collection-by-hand. The
-constraint that actually gates progress now is snapshot history over time,
-not trade count -- move to the next phase when the exit criteria are met.
+The original personal trade-log idea was replaced by a stronger source of
+truth: gpovalues.com already publishes community-solved values from observed
+trades. This project now builds a better evaluator, dashboard, and model
+diagnostic layer on top of that public market data.
 
-| Phase | Goal | Key tasks | Exit criteria | Est. duration |
-|---|---|---|---|---|
-| **0. Setup** | Working repo, environment | `pip install -r requirements.txt && pip install -e .`, confirm `pytest` passes | `pytest` green (offline, no network needed) | 1 day |
-| **1. First real pull** | Confirm the primary data source works | Run `run_ingest_gpovalues.py` against the live API, run `run_ingest_tier.py` against the tier JSON, run `run_feature_build.py`, spot-check 5-10 items against `gpovalues.com` directly | Merged feature matrix exists, values match the live site for items you check by hand | 1 day |
-| **2. Snapshot accumulation** | Build real trend data | Schedule `run_ingest_gpovalues.py` daily (cron or manual), let it run | 7-14+ distinct snapshot dates in `data/snapshots/` | 1-2 weeks, passive |
-| **3. Dashboard + deployment** | Make the evaluator visible and keep data fresh | Add Streamlit dashboard, local launchers, and GitHub Actions daily ingest around 9am Manila time | Dashboard runs locally; scheduled workflow commits fresh snapshots and outputs when connected to GitHub | Complete locally; hosted automation remains open |
-| **4. Evaluator in daily use** | Actually use it before buying | Run `evaluator/evaluate.py` or the Streamlit lookup against real listings you come across (Discord, marketplace sites, wherever you're buying from) -- no logging required, just query it live | You've used it on 10+ real decisions and can point to at least one where it changed what you did | Ongoing from week 2 |
-| **5. Trend quality pass** | Move past first-vs-last delta | Once you have 10+ snapshot dates, upgrade `trend_model.py` from a simple delta to a proper slope (linear regression over snapshot index, or `statsmodels` if you want seasonality awareness) | Trend numbers you'd defend in an interview, not just a two-point delta | 3-5 days once Phase 2 exit criteria hit |
-| **6. Low-confidence backfill** | Handle the items gpovalues is thin on | Train a small regression (`scikit-learn`) on high/medium-confidence items: structural features (tier, rarity, category) -> value. Use it to sanity-check low-confidence items, not replace their number | A documented estimate for every low-confidence item, clearly labeled as model-derived vs. observed | 1 week |
-| **7. Portfolio packaging** | Resume-ready case study | Write up the methodology (be specific: what gpovalues does, what you added on top and why), include dashboard screenshots and an honest "what this doesn't do" section | Case study + repo both presentable without extra verbal explanation | In progress |
+## Completed
 
-## What changed from the original plan, and why
+| Phase | Goal | Status |
+|---|---|---|
+| 0. Setup | `src` package layout, installable project, offline tests | Done |
+| 1. First real pull | gpovalues ingestion, tier parser, merged feature matrix | Done |
+| 2. Snapshot accumulation | Dated gpovalues and tier snapshots for trend context | Done and ongoing |
+| 3. Dashboard foundation | Streamlit app with routed pages and shared styling | Done |
+| 4. Daily-use evaluator | CLI and Item Lookup with confidence bands and price verdicts | Done |
+| 5. Dashboard polish | Start Here, footer links, Value List, top nav, refresh controls | Done |
+| 6. Trade Simulator | Two-sided trade comparison with dialog-based add-item flow | Done |
+| 7. Structural value regression | RandomForest fallback, low-confidence/tier-only estimates, anomaly diagnostics | Done |
+| 8. SHAP explainability | TreeExplainer for the existing RandomForestRegressor, log-space contribution chart, additivity test | Done |
 
-The original design needed you to log completed trades to have any labeled
-data at all. You don't trade item-for-item and don't have that log, so it
-was a dead end. gpovalues.com already does what a trade log would have
-given you, at a scale (29K trades) no amount of personal logging would
-reach. The project is now "build a better evaluator on top of real market
-data" instead of "predict my own trades" -- a stronger and more honest fit
-for how you actually use the market.
+## Current focus
 
-## What's intentionally deferred
+- Validate model-insight wording against real anomalous items so the UI explains
+  model behavior without implying the model corrects gpovalues.
+- Keep snapshot data fresh and verify hosted refresh/deploy behavior.
+- Prepare the portfolio narrative: what gpovalues provides, what this project
+  adds, where the model is useful, and where it should not be trusted.
+- Continue tightening dashboard ergonomics and responsive presentation as real
+  use reveals friction.
 
-- **Personal price-check logging.** You opted to skip this for now and rely
-  on the API. Nothing stops you from adding a lightweight log later if you
-  want a personal "did the evaluator actually help me" record for the
-  portfolio write-up -- it's a small addition, not a redesign, if you
-  change your mind in Phase 3+.
-- **Wiki scraping for content features** (PvP relevance, drop mechanics
-  beyond what's already in the tier JSON). Worth doing eventually for
-  richer "worth it" reasoning, not needed for the core evaluator to work.
-- **Discord bot wrapper.** Nice for later daily-use ergonomics, but the
-  Streamlit dashboard now covers the portfolio-facing interface.
+## Next modeling work
+
+1. **Trend quality pass**
+   The current trend model is a first-snapshot to latest-snapshot delta. Upgrade
+   it to a slope/regression-style trend only after enough long-run snapshot
+   history exists to defend the result.
+
+2. **Structural feature refinement**
+   Improve features that the regression model currently treats too coarsely,
+   especially prestige/item-family signals, unit-like rows such as bounty, and
+   richer rarity/content context.
+
+3. **Model validation write-up**
+   Document the train/test split, log-scale target, RandomForest selection rule,
+   residual/anomaly meaning, and SHAP additivity guarantee in portfolio language.
+
+## Intentionally deferred
+
+- **Real trend forecasting.** There are multiple snapshots now, but robust
+  forecasting still needs more history and careful validation. Do not present
+  first-to-last deltas as forecasts.
+- **Automated hosted data freshness.** There is no checked-in workflow file
+  right now. Local scripts work; hosted automation can be added when deployment
+  requirements are settled.
+- **`is_prestige` / item-family feature engineering.** The model would likely
+  benefit from explicit prestige/family flags, but those need careful parsing
+  and tests so they do not become brittle string hacks.
+- **Contextual glossary/popover UX.** Terms like confidence, demand ratio,
+  structural residual, and SHAP log contribution could use inline explanations
+  in the dashboard, but the core pages work without it.
+- **Wiki/content feature ingestion.** PvP relevance, drop mechanics, update
+  timing, and content source could enrich the model later. They are not needed
+  for the current evaluator to work.
+- **Discord bot wrapper.** Useful for daily ergonomics eventually, but the CLI
+  and Streamlit dashboard cover the current use cases.
+- **Personal price-check logging.** Still optional. It could support a portfolio
+  "did this tool change decisions?" story, but it is not a primary data source.
+
+## Definition of done for future additions
+
+- User-facing model output is labeled as observed, model-derived, or diagnostic.
+- Tests remain offline; live network calls stay outside tests.
+- Dashboard additions reuse package modules rather than duplicating business
+  logic in Streamlit.
+- Any dependency added to `item-market-signals/requirements.txt` is also added
+  to the repo-root `requirements.txt`.
