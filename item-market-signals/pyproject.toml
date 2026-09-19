@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "item-market-signals"
 version = "0.1.0"
-description = "Virtual item market analysis: reference tier data joined against a personal trade log."
+description = "Grand Piece Online item market dashboard and evaluator built on gpovalues snapshots."
 requires-python = ">=3.9"
 
 [tool.setuptools.packages.find]

@@ -5,7 +5,9 @@ import pytest
 
 from market_signals.models.value_regression import (
     InsufficientTrainingDataError,
+    build_value_explainer,
     encode_feature_frame,
+    explain_value_prediction,
     predict_value,
     prepare_feature_frame,
     train_value_regression,
@@ -55,3 +57,16 @@ def test_higher_tier_predicts_higher_value_all_else_equal() -> None:
     high_tier = {**low_tier, "tier_ordinal": 8}
 
     assert predict_value(model, high_tier) > predict_value(model, low_tier)
+
+
+def test_shap_values_reconstruct_raw_log_prediction() -> None:
+    df = _fixture()
+    model = train_value_regression(df, min_training_samples=5)
+    explainer = build_value_explainer(model)
+    row = df.iloc[0]
+
+    explanation = explain_value_prediction(model, row, explainer)
+    raw_prediction = float(model.pipeline.predict(prepare_feature_frame(pd.DataFrame([row])))[0])
+    reconstructed = explanation.base_value_log + float(explanation.contributions["shap_value_log"].sum())
+
+    assert reconstructed == pytest.approx(raw_prediction, rel=1e-6, abs=1e-6)

@@ -9,6 +9,7 @@ from market_signals.features.build_feature_matrix import build_feature_matrix
 from market_signals.models.trend_model import load_snapshot_history, most_traded
 from market_signals.models.value_regression import (
     ValueRegressionResult,
+    build_value_explainer,
     load_latest_tier_reference,
     train_value_regression,
 )
@@ -44,3 +45,9 @@ def load_tier_reference() -> pd.DataFrame:
 def load_value_regression_model() -> ValueRegressionResult:
     """Train and cache the structural value model object."""
     return train_value_regression()
+
+
+@st.cache_resource(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def load_value_explainer(_value_model: ValueRegressionResult) -> object:
+    """Build and cache the SHAP explainer adjacent to the trained model."""
+    return build_value_explainer(_value_model)

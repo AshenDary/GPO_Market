@@ -65,8 +65,16 @@ Actions freshness job so hosted dashboards have data. Raw pulls under
 - The Trend tab follows the same `MIN_*` guard pattern as
   `models/trend_model.py`: if there are fewer than `MIN_SNAPSHOTS`, show a
   plain message instead of an empty or misleading chart.
-- Prefer Streamlit cache decorators only around data-loading wrappers; keep
-  package modules free of Streamlit imports.
+- Keep package modules free of Streamlit imports. Use `st.cache_data` for
+  dataframe/history loaders and `st.cache_resource` for model-adjacent objects
+  such as the trained value model and SHAP explainer.
+- For add-item flows that need focused user input, follow the Trade Simulator
+  pattern: keep durable selections in `st.session_state`, open a small
+  `st.dialog`, append one normalized item payload, then rerun to close.
+- Model Insights SHAP charts must preserve the log-scale framing from
+  `models/value_regression.py`: final predictions may be shown in value units,
+  but per-feature SHAP values are relative log-space contributions, not
+  currency amounts.
 
 ## Adding a new data source
 

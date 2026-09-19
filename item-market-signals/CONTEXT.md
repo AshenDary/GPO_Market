@@ -1,163 +1,181 @@
 # CONTEXT.md
 
-Read this before doing anything else in this repo. It's the condensed
-architecture + state doc so you don't need the full chat history that
-produced this project. For conventions and command recipes, see SKILLS.md.
-For the phase-by-phase plan, see ROADMAP.md. For setup/usage, see README.md.
+Read this before doing anything else in this repo. It is the condensed
+architecture + state doc so you do not need the full chat history that
+produced this project. For command recipes, see `SKILLS.md`. For the
+phase-by-phase plan, see `ROADMAP.md`. For setup/usage, see `README.md`.
 
 ## What this is
 
-An evaluator for a virtual item secondary market (a Roblox game's trading
-economy). Given an item name and optionally an asking price from a seller,
-it returns a real fair-value estimate, a confidence band, a trend if
-history exists, and a plain buy/fair/overpriced verdict.
+Item Market Signals is a market intelligence dashboard and evaluator for the
+Grand Piece Online trading economy. It combines community-solved values from
+gpovalues.com with a curated tier/rarity reference, stores dated snapshots, and
+turns the result into:
 
-This is a personal tool AND a data science portfolio project. Both matter:
-code should work correctly (personal use) and be defensible in an interview
-(portfolio use) -- that means honest uncertainty handling matters as much
-as the happy path. See "Design principles" below.
+- current fair-value lookup with confidence bands
+- asking-price verdicts: good deal, fair, slightly high, or overpriced
+- snapshot-based trend context
+- trade-side comparison through a simulator
+- structural value-model diagnostics, low-confidence estimates, and SHAP
+  explanations for the value regression model
+
+This is a personal tool and a data science portfolio project. Both matter:
+code should work correctly for real buying decisions and be defensible in an
+interview. Honest uncertainty handling matters as much as the happy path.
+
+There is no personal trade log. That was the original design and was
+deliberately dropped because the user buys from sellers and does not have a
+completed item-for-item trade history. Do not reintroduce a trade log as the
+primary data source without being asked.
 
 ## Data sources
 
-1. **gpovalues.com API** (primary, real prices) -- a public JSON API
-   (`https://gpovalues.com/api/v1/items.json`, no auth) solving item values
-   from ~29,000 observed Discord trades. Returns `value`, `ci_low`,
-   `ci_high`, `confidence` (low/medium/high, purely trade-count driven:
-   <200/200-999/1000+), `demand`, `demand_ratio`, `trade_count`. Full
-   methodology: https://gpovalues.com/legal/methodology.
-2. **Tier/rarity reference JSON** (secondary, structural) -- a hand-curated
-   community tier list (`data/raw/*.json`). No price data. Used only to
-   enrich items with category/rarity/obtainability, and to sanity-check
-   whether the "official" tier ranking still matches what the market
-   actually pays.
-
-There is **no personal trade log**. That was the original design and was
-deliberately dropped -- the user doesn't complete item-for-item trades, he
-buys from sellers, and had no  historical log to build one from. Do not
-reintroduce a trade-log-as-primary-data-source design without being asked.
+1. **gpovalues.com API** (primary, real prices) - public JSON API at
+   `https://gpovalues.com/api/v1/items.json`, no auth. It provides solved
+   `value`, `ci_low`, `ci_high`, `confidence`, `demand`, `demand_ratio`,
+   `trade_count`, images, and share URLs. See
+   https://gpovalues.com/legal/methodology for their value methodology.
+2. **Tier/rarity reference JSON** (secondary, structural) - curated community
+   tier-list data in `data/raw/gpo_market_dataset.json`. This provides
+   category, tier, sub-tier, obtainability, rarity/popularity signals, aliases,
+   and flags such as unstable/unobtainable. It is structural context, not price
+   data.
 
 ## Architecture
 
+```text
+item-market-signals/
+  dashboard/
+    app.py                      Streamlit router using st.Page top navigation
+    pages/
+      guide.py                  Start Here / dashboard directory
+      overview.py               coverage, confidence, tier scatter, most-traded ranking
+      lookup.py                 one-item lookup, asking-price verdict, low-confidence estimate panel
+      simulator.py              two-sided trade simulator with dialog-based item add flow
+      model_insights.py         value regression diagnostics, anomalies, SHAP explanations
+      trend.py                  per-item snapshot trend chart
+      value_list.py             searchable full gpovalues catalog
+    components/
+      data.py                   cached Streamlit loaders; model uses st.cache_resource
+      layout.py                 refresh button, metric cards, footer links
+      styling.py                shared monochrome visual system
+      views.py                  page renderers and chart/table UI
+    assets/strawhat_favicon.png favicon
+  data/
+    raw/gpo_market_dataset.json curated tier input
+    snapshots/
+      gpovalues_{date}.csv      dated public API pulls
+      tier_reference_{date}.csv dated parses of the curated tier JSON
+  outputs/
+    feature_matrix_master.csv   generated merged matrix for dashboard/CLI fallback
+  scripts/
+    run_ingest_gpovalues.py     thin wrapper around primary ingestion
+    run_ingest_tier.py          thin wrapper around tier parser
+    run_feature_build.py        thin wrapper around merge output
+  src/
+    config/settings.py          paths, API URL/user-agent, ordinal encodings
+    market_signals/
+      ingest/
+        pull_gpovalues_snapshot.py fetch live API, flatten payload, write dated snapshot
+        parse_tier_dataset.py      flatten tier JSON, derive structural columns, write dated snapshot
+      features/
+        build_feature_matrix.py    merge latest gpovalues + tier reference by name then alias
+      models/
+        trend_model.py             first-to-last snapshot deltas, guarded by MIN_SNAPSHOTS
+        value_regression.py        structural value model, RF fallback, estimates, SHAP explanations
+      evaluator/
+        evaluate.py                Typer CLI for lookup/verdict/trend
+      utils/                       currently empty placeholder package
+  tests/
+    fixtures/                  trimmed real API/model fixtures
+    test_*.py                  offline tests; no live network calls
 ```
-data/raw/*.json              raw tier-list JSON (input to parse_tier_dataset)
-data/snapshots/
-  gpovalues_{date}.csv        dated pulls from the live API
-  tier_reference_{date}.csv   dated parses of the tier JSON
-outputs/
-  feature_matrix_master.csv   the two snapshot types merged
-dashboard/
-  app.py                      Streamlit entrypoint/router using st.Page + top nav
-  pages/
-    overview.py               market overview page
-    lookup.py                 item lookup page
-    simulator.py              trade comparison and outcome simulator
-    trend.py                  trend history page
-    value_list.py             searchable full value catalog
-    guide.py                  first-visit explainer page
-    model_insights.py         structural model diagnostics page
-  components/
-    data.py                   cached loaders + pipeline reuse for dashboard pages
-    views.py                  overview/lookup/simulator/trend/value-list rendering and charting
-    styling.py                shared monochrome UI system and responsive styles
-.streamlit/
-  config.toml                 deployed fallback theme values
 
-src/config/settings.py        paths, ordinal encodings, API url/UA -- single source of truth
-src/market_signals/
-  ingest/
-    pull_gpovalues_snapshot.py   fetch() [network] + flatten() [pure, testable] + run()
-    parse_tier_dataset.py        flatten nested tier JSON -> tier_reference snapshot
-  features/
-    build_feature_matrix.py      merge latest of each snapshot type, name then alias/shortcut match
-  models/
-    trend_model.py                value delta across snapshot history, gated on 2+ dates
-  evaluator/
-    evaluate.py                   typer CLI, the actual user-facing tool
-  utils/                          reserved, currently empty
+Data flow:
 
-scripts/                    thin CLI wrappers around the above, one per pipeline stage
-tests/                      fixtures/ has a real (trimmed) API sample for offline testing
-```
+1. `pull_gpovalues_snapshot.py` writes dated real-price snapshots.
+2. `parse_tier_dataset.py` writes dated structural tier-reference snapshots.
+3. `build_feature_matrix.py` merges the latest of each using exact normalized
+   item name, then gpovalues shortcut vs tier alias. Unmatched gpovalues rows
+   are kept and flagged.
+4. `trend_model.py` reads all gpovalues snapshots for historical movement.
+5. `value_regression.py` trains on medium/high-confidence rows, predicts
+   `log(value)`, converts final predictions back with `exp`, and uses SHAP
+   TreeExplainer on the selected RandomForestRegressor to explain model
+   predictions in log-space.
+6. The CLI and Streamlit dashboard reuse these package modules instead of
+   duplicating parsing, matching, trend, or verdict logic.
 
-Data flow: `pull_gpovalues_snapshot.py` and `parse_tier_dataset.py` each
-write independent dated snapshots -> `build_feature_matrix.py` merges the
-latest of each -> `trend_model.py` reads snapshot *history* (not just
-latest) for trend -> `evaluate.py` and `dashboard/pages/*.py` read the merged
-matrix plus trend to answer one query or show the portfolio dashboard.
+The repository currently contains multiple dated snapshots through
+`2026-09-19` and no checked-in GitHub Actions workflow file. Snapshot refresh
+is still local/manual unless a deployment environment runs the scripts.
 
-Dashboard data is cached for one hour (`st.cache_data` in
-`dashboard/components/data.py`). The shared "Refresh data" button clears
-the cache and reruns the app so newly written snapshots appear immediately.
+## Current phase
 
-Locally, `data/snapshots/` and `outputs/` are generated by the pipeline. The
-current repository contains dated snapshot history through 2026-09-03 and a
-merged feature matrix used by the dashboard. Data refresh is currently run
-through the local ingestion scripts; no checked-in GitHub Actions workflow is
-present. The curated tier input `data/raw/gpo_market_dataset.json` is tracked
-because the tier parser needs it; other raw JSON pulls remain ignored.
+The core product is built and usable on `main`: ingestion, feature merging,
+CLI evaluator, dashboard, trend views, Value List, footer/navigation polish,
+Trade Simulator, structural value regression, model-derived estimates, anomaly
+diagnostics, and SHAP explainability are implemented.
 
-## Current status
+Current work is validation, packaging, and model-quality refinement:
 
-The core product is implemented on `main`: the ingestion pipeline, feature
-builder, CLI evaluator, and Streamlit dashboard work together. The dashboard
-currently provides Start Here, Overview, Item Lookup, Trade Simulator, Trend,
-Value List, and Model Insights views. Multiple dated snapshots are available,
-so project-level and sufficiently observed item-level trends can be shown.
+- keep snapshots fresh and verify hosted data refresh behavior
+- improve structural feature quality, especially prestige/item-family signals
+- refine model-insight language so regression output never masquerades as
+  observed value
+- upgrade trend modeling once there is enough long-run history for a real
+  slope/forecast instead of first-to-last deltas
+- prepare portfolio screenshots/write-up around methodology and limitations
 
-Current work is validation and refinement: checking snapshot freshness and
-trend behavior against real data, improving UI/UX, and packaging the project
-for contributors. The trend model is intentionally guarded by minimum history
-and currently reports a first-to-last change rather than a more robust
-regression-based trend.
+## Design principles
 
-## Design principles (don't violate these when extending the code)
-
-- **Every uncertainty-bearing calculation has an explicit guard and says so
-  out loud instead of returning a confident-looking wrong answer.**
-  `trend_model.py` refuses to compute a trend under `MIN_SNAPSHOTS`. The
-  evaluator surfaces `confidence == "low"` as a visible caveat, not a
-  footnote. If you add a new model, give it the same kind of guard.
-- **Network fetch and parsing logic are always separated.** See
-  `pull_gpovalues_snapshot.py`: `fetch_items_json()` hits the network,
-  `flatten_items()` is pure and takes a dict. Tests only ever call the pure
-  function, against a fixture, never the network. Keep this split for any
-  new data source.
-- **Unmatched/ambiguous items are flagged, never silently dropped or
-  guessed at.** `build_feature_matrix.py` keeps gpovalues items even
-  without tier enrichment and prints how many. `evaluate.py` lists all
-  candidates and asks the user to be more specific rather than picking one.
-- **Snapshots are always dated and never overwritten.** This is what makes
-  trend analysis possible later. Don't "simplify" this into a single
-  always-current file.
-- **Dashboard code is presentation-only.** `dashboard/app.py`,
-  `dashboard/pages/`, and `dashboard/components/` import existing modules
-  for merging, lookup, verdicts, and trend guards. Don't duplicate parser
-  or matching logic in Streamlit just because it would be convenient.
-- **`src`-layout, single root.** Both `config` and `market_signals` live
-  under `src/`. `pip install -e .` makes both importable without manual
-  `sys.path` hacks anywhere except `conftest.py` and the `scripts/*.py`
-  wrappers (which exist specifically so scripts work even without the
-  editable install, e.g. on a fresh clone before `pip install -e .` has run).
+- **Every uncertainty-bearing calculation has an explicit guard and says so out
+  loud.** Trend requires `MIN_SNAPSHOTS`; low-confidence values are caveated;
+  model estimates are labeled as model-derived.
+- **Observed market values beat model-derived estimates.** The regression model
+  is structural context and low-confidence/tier-only support, not a replacement
+  for gpovalues.
+- **Log-scale model math must stay honest.** The value model predicts
+  `log(value)`. Display final predictions in value units if useful, but show
+  SHAP contributions as relative log-space pushes, not per-feature currency
+  deltas.
+- **Network fetch and parsing logic stay separated.** Tests call pure flattening
+  functions against fixtures, never the live gpovalues API.
+- **Unmatched/ambiguous items are flagged, never silently guessed.** Avoid fuzzy
+  matching unless the output clearly marks it and the behavior is discussed.
+- **Snapshots are dated and never overwritten.** This is what makes historical
+  trend analysis possible.
+- **Dashboard code is presentation-only.** Pages/components import package
+  modules for data logic. Do not duplicate parser, matching, model, or verdict
+  behavior in Streamlit for convenience.
+- **`src` layout, single package root.** `config` and `market_signals` live
+  under `src/`. `pip install -e .` makes them importable. Only `conftest.py`
+  and thin script wrappers should compensate for a missing editable install.
 
 ## Known gotchas
 
-- `typer` collapses a single-command app: `evaluator/evaluate.py` has only
-  one command, so it's invoked as
-  `python -m market_signals.evaluator.evaluate "Item Name"` -- **no**
-  subcommand name, even though the function is called `check`.
-- gpovalues item names and tier-list item names don't always match exactly
-  (e.g. tier list says "Prestige Candy Cane (+PCC)", API says "Prestige
-  Candy Cane" with `shortcut: "PCC"`). The merge tries exact name, then
-  shortcut-vs-alias, then gives up and flags it -- don't try to make this
-  "smarter" with fuzzy string matching without discussing it first, since
-  silent fuzzy matches on item names are exactly the kind of thing that
-  produces confidently wrong valuations.
-- This project may be run inside network-restricted sandboxes where
-  `gpovalues.com` isn't reachable. If a test or script needs live network
-  and it's unavailable, that's expected in some environments -- use the
-  fixture-based tests to verify logic instead of assuming network access.
-- Streamlit caching can make the dashboard look stale right after running a
-  pipeline stage. Use the sidebar `Refresh data` button before assuming data
-  did not update.
-
-
+- **There are two requirements files.** Keep repo-root `requirements.txt` and
+  `item-market-signals/requirements.txt` in sync when adding dependencies.
+- **Git root vs project folder is easy to mix up.** The repository root is
+  `GPO_Market/`; the active Python project is `GPO_Market/item-market-signals/`.
+  Most commands should be run after `cd item-market-signals`.
+- **Typer collapses a single-command app.** Invoke the CLI as
+  `python -m market_signals.evaluator.evaluate "Item Name"` with no `check`
+  subcommand.
+- **gpovalues names and tier-list names do not always match.** The merge tries
+  exact name, then shortcut/alias. Avoid silent fuzzy matching on item names.
+- **Some environments block live network.** Fixture-based tests are the source
+  of truth for offline verification; live ingestion needs network access.
+- **Streamlit caches can look stale.** Use the page `Refresh data` button after
+  running ingestion/build scripts. For hosted Streamlit Cloud, pushes may still
+  require a manual app reboot before dependency/runtime changes take effect.
+- **Local Python and hosted Python may differ.** This machine currently runs
+  Python 3.9; Streamlit Cloud may use a much newer runtime such as Python 3.14.
+  Dependency issues can be runtime-specific, so verify both when changing
+  packages like Streamlit, sklearn, Plotly, or SHAP.
+- **Plotly `titlefont` is deprecated.** Use nested title dictionaries such as
+  `xaxis={"title": {"text": "...", "font": {...}}}` instead of old
+  `titlefont` keys.
+- **Value-regression SHAP explains encoded model features.** Categorical values
+  appear as one-hot feature labels like `category_X` or `obtainability_Y`.
+  Interpret them as model drivers in log-space, not literal money deltas.
