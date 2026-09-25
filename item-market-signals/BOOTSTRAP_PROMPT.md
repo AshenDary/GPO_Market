@@ -8,17 +8,19 @@ from scratch each session.
 
 ---
 
-Read `CONTEXT.md` and `SKILLS.md` in this repo root before doing anything
-else. They contain the full architecture, data flow, module
-responsibilities, file placement rules, and coding conventions for this
-project. Don't ask me to re-explain the project -- everything you need is
-in those two files. If they're missing, stop and tell me instead of
-guessing at the structure.
+From the Git root `GPO_Market/`, work in the Python project directory
+`item-market-signals/`. Read `item-market-signals/CONTEXT.md` and
+`item-market-signals/SKILLS.md` before doing anything else. They contain the
+full architecture, data flow, module responsibilities, file placement rules,
+and coding conventions for this project. Don't ask me to re-explain the
+project -- everything you need is in those two files. If they're missing, stop
+and tell me instead of guessing at the structure.
 
 **Task 1 -- Arrange loose files.**
-Check the repo root and any `_inbox/`-style staging folder for files that
-aren't yet in their correct location per CONTEXT.md's architecture and
-SKILLS.md's file placement table. For each loose file:
+Check the Git root, the `item-market-signals/` project directory, and any
+`_inbox/`-style staging folder for files that aren't yet in their correct
+location per CONTEXT.md's architecture and SKILLS.md's file placement table.
+For each loose file:
 - Read its docstring/imports to identify what it does.
 - Match it against SKILLS.md's file placement rules (ingestion -> `src/market_signals/ingest/`, merging -> `features/`, derived signals -> `models/`, CLI tools -> `evaluator/`, tests -> `tests/`, fixtures -> `tests/fixtures/`, thin runners -> `scripts/`, raw data -> `data/raw/`).
 - Move it to the correct path, renaming only if the existing file at that
@@ -32,30 +34,35 @@ Create any missing directories or empty `__init__.py` files needed to match
 the package structure in CONTEXT.md. Don't overwrite any file that already
 matches the described structure and already has content.
 
-**Task 3 -- Environment setup and verification.**
-Run these in order. Stop and report immediately if any step fails, rather
-than continuing past a failure:
+**Task 3 -- Environment setup and offline verification.**
+Run these from `item-market-signals/` in order. Stop and report immediately if
+any step fails, rather than continuing past a failure:
 
 ```
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 pytest
-python scripts/run_ingest_gpovalues.py
-python scripts/run_ingest_tier.py
-python scripts/run_feature_build.py
 python -m market_signals.evaluator.evaluate "Prestige Candy Cane"
 # Optional dashboard check:
 streamlit run dashboard/app.py
 # Or double-click run_dashboard.command / run_dashboard.bat
 ```
 
-Note: `run_ingest_gpovalues.py` needs network access to `gpovalues.com`. If
-that's unavailable in your environment, say so explicitly rather than
-skipping it silently, and run `pytest` as the fallback verification (it's
-fully offline).
+Do not run live ingestion as routine setup. It requires network access and
+writes dated snapshot/output files. Only run the data refresh pipeline when the
+task explicitly asks for refreshed market data:
+
+```
+python scripts/run_ingest_gpovalues.py
+python scripts/run_ingest_tier.py
+python scripts/run_feature_build.py
+```
+
+If a requested live refresh cannot reach `gpovalues.com`, say so explicitly and
+leave the existing committed snapshots in place.
 
 **Task 4 -- Report back.**
 Summarize: which files you moved and to where, anything left unresolved,
-whether `pytest` passed (paste the failure if not), and the final
-evaluator command's output.
+whether `pytest` passed (paste the failure if not), the final evaluator
+command's output, and whether you intentionally ran any live data refresh.

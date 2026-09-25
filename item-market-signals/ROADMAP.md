@@ -18,12 +18,14 @@ diagnostic layer on top of that public market data.
 | 6. Trade Simulator | Two-sided trade comparison with dialog-based add-item flow | Done |
 | 7. Structural value regression | RandomForest fallback, low-confidence/tier-only estimates, anomaly diagnostics | Done |
 | 8. SHAP explainability | TreeExplainer for the existing RandomForestRegressor, log-space contribution chart, additivity test | Done |
+| 9. Scheduled data refresh | GitHub Actions workflow for daily/manual ingest, feature build, and data-output commits | Done |
 
 ## Current focus
 
 - Validate model-insight wording against real anomalous items so the UI explains
   model behavior without implying the model corrects gpovalues.
-- Keep snapshot data fresh and verify hosted refresh/deploy behavior.
+- Monitor scheduled ingest commits and keep hosted dashboard refresh/deploy
+  behavior verified separately from the data workflow.
 - Prepare the portfolio narrative: what gpovalues provides, what this project
   adds, where the model is useful, and where it should not be trusted.
 - Continue tightening dashboard ergonomics and responsive presentation as real
@@ -50,9 +52,9 @@ diagnostic layer on top of that public market data.
 - **Real trend forecasting.** There are multiple snapshots now, but robust
   forecasting still needs more history and careful validation. Do not present
   first-to-last deltas as forecasts.
-- **Automated hosted data freshness.** There is no checked-in workflow file
-  right now. Local scripts work; hosted automation can be added when deployment
-  requirements are settled.
+- **Hosted app reload/deploy guarantees.** The GitHub Actions workflow commits
+  refreshed snapshots and outputs, but hosted dashboard reload behavior still
+  depends on the deployment environment and should be verified there.
 - **`is_prestige` / item-family feature engineering.** The model would likely
   benefit from explicit prestige/family flags, but those need careful parsing
   and tests so they do not become brittle string hacks.

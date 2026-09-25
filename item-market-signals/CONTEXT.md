@@ -106,9 +106,25 @@ Data flow:
 6. The CLI and Streamlit dashboard reuse these package modules instead of
    duplicating parsing, matching, trend, or verdict logic.
 
-The repository currently contains multiple dated snapshots through
-`2026-09-19` and no checked-in GitHub Actions workflow file. Snapshot refresh
-is still local/manual unless a deployment environment runs the scripts.
+The repository contains accumulated dated snapshots under `data/snapshots/`.
+Check the snapshot filenames for the current coverage window instead of
+treating this document as the source of truth for a fixed latest date.
+
+`.github/workflows/daily_ingest.yml` defines the scheduled data-refresh job at
+the Git root. It runs at `0 1 * * *` (1:00 AM UTC / 9:00 AM Asia/Manila) and
+can also be started manually with `workflow_dispatch`. The job runs from the
+`item-market-signals/` working directory on Python 3.9, installs dependencies
+and the editable package, then runs:
+
+1. `python scripts/run_ingest_gpovalues.py`
+2. `python scripts/run_ingest_tier.py`
+3. `python scripts/run_feature_build.py`
+
+The final step stages `data/snapshots/*.csv` and `outputs/*.csv`, commits them
+as `github-actions[bot]` with `Update daily market snapshots` only when there
+are staged changes, and pushes that commit. Hosted dashboard deploy/reload
+behavior is separate from this data commit workflow and should be verified in
+the hosting environment.
 
 ## Current phase
 
@@ -119,7 +135,8 @@ diagnostics, and SHAP explainability are implemented.
 
 Current work is validation, packaging, and model-quality refinement:
 
-- keep snapshots fresh and verify hosted data refresh behavior
+- monitor scheduled ingest commits and verify hosted deploy/reload behavior
+  separately
 - improve structural feature quality, especially prestige/item-family signals
 - refine model-insight language so regression output never masquerades as
   observed value

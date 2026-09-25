@@ -5,6 +5,9 @@ for what the project is; this file is about how to work in it.
 
 ## Command reference
 
+Run these from `GPO_Market/item-market-signals/` unless a command says
+otherwise.
+
 ```bash
 # one-time setup
 python3 -m venv .venv && source .venv/bin/activate
@@ -34,6 +37,9 @@ python -m market_signals.models.trend_model
 
 ## File placement rules
 
+Paths in this table are relative to `GPO_Market/item-market-signals/` except
+for `.github/workflows/`, which is relative to the Git root `GPO_Market/`.
+
 | Kind of file | Goes in |
 |---|---|
 | New data source ingestion (fetch + parse) | `src/market_signals/ingest/` |
@@ -43,7 +49,7 @@ python -m market_signals.models.trend_model
 | Path constants, encodings, shared config | `src/config/settings.py` (don't create a second config file) |
 | Thin script wrapper for a pipeline stage | `scripts/`, name `run_<stage>.py` |
 | Streamlit dashboard entrypoint and dashboard-only UI helpers | `dashboard/` |
-| GitHub Actions freshness jobs | `.github/workflows/` |
+| GitHub Actions freshness jobs | Git root `.github/workflows/` |
 | Tests | `tests/`, filename `test_<module_under_test>.py` |
 | Offline test fixtures (saved API responses, sample JSON) | `tests/fixtures/` |
 | Raw external data dumps (tier lists, etc.) | `data/raw/` |
@@ -54,6 +60,11 @@ Note: snapshot and output CSVs may be committed by the scheduled GitHub
 Actions freshness job so hosted dashboards have data. Raw pulls under
 `data/raw/` stay ignored except for the curated tier input
 `data/raw/gpo_market_dataset.json`, which the workflow needs.
+
+The checked-in freshness workflow is `GPO_Market/.github/workflows/daily_ingest.yml`.
+It runs daily on GitHub Actions and can be started manually. It installs the
+project, runs the gpovalues ingest, tier parse, and feature-build scripts, then
+commits changed `data/snapshots/*.csv` and `outputs/*.csv` files.
 
 ## Streamlit dashboard conventions
 
@@ -113,7 +124,7 @@ If it's a new derived signal (not just a lookup), it needs:
 - Fixtures are real (possibly trimmed) samples of actual data, not
   hand-invented dicts that might not match the real shape -- when adding a
   fixture, get it from an actual API response or actual source file first.
-- `conftest.py` at repo root handles `sys.path` so tests can `import
+- `item-market-signals/conftest.py` handles `sys.path` so tests can `import
   market_signals...` and `import config...` without needing `pip install -e .`
   first -- don't remove it or duplicate its logic inside individual test files.
 

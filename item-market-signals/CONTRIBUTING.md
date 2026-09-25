@@ -43,7 +43,8 @@ streamlit run dashboard/app.py
 ```
 
 Confirm that the affected page works with the committed snapshot data and
-that the sidebar refresh still makes newly generated data visible.
+that the page-level `Refresh data` button near the top of data-backed pages
+makes newly generated data visible.
 
 ## Data refreshes
 
@@ -59,6 +60,10 @@ Only run these commands when intentionally refreshing market data. Review
 the resulting dated snapshots and generated outputs before committing them.
 Raw API pulls under `data/raw/` remain ignored; the curated tier input is the
 tracked exception.
+
+Routine snapshot refreshes are also handled by the GitHub Actions workflow at
+the Git root in `.github/workflows/daily_ingest.yml`, which runs the same three
+pipeline stages and commits changed snapshot/output CSVs when they differ.
 
 ## Pull requests
 
