@@ -13,6 +13,7 @@ The active Python project lives in [`item-market-signals/`](item-market-signals/
 - tier/rarity reference parsing from a curated JSON file
 - feature merging by exact item name, then shortcut/alias fallback
 - CLI value lookup with asking-price verdicts
+- private local decision log for real buy/no-buy checks and later resale outcomes
 - Streamlit dashboard with Start Here, Overview, Item lookup, Trade Simulator,
   Model Insights, Trend, and Value List pages
 - snapshot-based trend context

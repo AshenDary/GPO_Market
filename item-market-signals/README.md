@@ -16,6 +16,8 @@ estimates are labeled as model-derived, and uncertainty is shown plainly.
 - curated tier/rarity JSON parsing into dated `tier_reference_*.csv` snapshots
 - merged feature matrix using exact item-name match, then shortcut/alias match
 - Typer CLI for quick fair-value and asking-price checks
+- private local decision log for real buy/no-buy checks and actual resale
+  outcomes
 - Streamlit dashboard with:
   - **Start Here** - dashboard directory and signal explanations
   - **Overview** - coverage, confidence counts, tier/value scatter, most-traded items
@@ -87,6 +89,32 @@ python -m market_signals.evaluator.evaluate "Candy Cane" --asking-price 300000
 Typer treats this as a single-command app, so there is no `check` subcommand in
 the invocation.
 
+## Private decision log
+
+The decision log is local and private. It records real buy/no-buy decisions,
+asking prices, snapshot-time gpovalues signals, and later actual resale
+outcomes if you add them. The real CSV lives at
+`data/decisions/decision_log.csv` and is ignored by Git; do not commit personal
+trading decisions.
+
+Log a buy or no-buy decision:
+
+```bash
+python scripts/run_decision_log.py log "Prestige Candy Cane" --asking-price 2900000 --decision buy --purchase-price 2850000
+python scripts/run_decision_log.py log "Candy Cane" --asking-price 350000 --decision no-buy
+```
+
+Inspect or update the private log:
+
+```bash
+python scripts/run_decision_log.py list
+python scripts/run_decision_log.py show <decision_id>
+python scripts/run_decision_log.py record-resale <decision_id> --resale-price 3100000 --resale-date 2026-10-10
+```
+
+Resale fields are for actual completed sales only. Future marked gpovalues
+values are separate fields and should not be described as realized profit.
+
 ## Run the dashboard
 
 ```bash
@@ -129,6 +157,7 @@ item-market-signals/
       views.py
     assets/strawhat_favicon.png
   data/
+    decisions/decision_log.csv  # local/private, ignored by Git
     raw/gpo_market_dataset.json
     snapshots/
       gpovalues_*.csv
@@ -139,9 +168,11 @@ item-market-signals/
     run_ingest_gpovalues.py
     run_ingest_tier.py
     run_feature_build.py
+    run_decision_log.py
   src/
     config/settings.py
     market_signals/
+      decisions/
       ingest/
       features/
       models/

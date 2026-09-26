@@ -14,6 +14,8 @@ SNAPSHOT_DIR = DATA_DIR / "snapshots"
 
 OUTPUT_DIR = ROOT_DIR / "outputs"
 
+DECISION_LOG_PATH = DATA_DIR / "decisions" / "decision_log.csv"
+
 # Public, documented API for community-solved GPO item values. No auth
 # required. See https://gpovalues.com/legal/methodology for how they derive
 # these numbers (Dijkstra ratio-chains over ~29K observed Discord trades,
