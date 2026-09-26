@@ -30,6 +30,8 @@ streamlit run dashboard/app.py
 # use it
 python -m market_signals.evaluator.evaluate "Item Name"
 python -m market_signals.evaluator.evaluate "Item Name" --asking-price 300000
+python scripts/run_decision_log.py log "Item Name" --asking-price 300000 --decision no-buy
+python scripts/run_decision_log.py list
 
 # trend across accumulated snapshots (needs 2+ snapshot dates)
 python -m market_signals.models.trend_model
@@ -46,6 +48,7 @@ for `.github/workflows/`, which is relative to the Git root `GPO_Market/`.
 | Logic that merges/joins snapshot types | `src/market_signals/features/` |
 | Anything computing a derived signal (trend, score, prediction) | `src/market_signals/models/` |
 | User-facing CLI tools | `src/market_signals/evaluator/` |
+| Private decision-log logic | `src/market_signals/decisions/` |
 | Path constants, encodings, shared config | `src/config/settings.py` (don't create a second config file) |
 | Thin script wrapper for a pipeline stage | `scripts/`, name `run_<stage>.py` |
 | Streamlit dashboard entrypoint and dashboard-only UI helpers | `dashboard/` |
@@ -53,6 +56,7 @@ for `.github/workflows/`, which is relative to the Git root `GPO_Market/`.
 | Tests | `tests/`, filename `test_<module_under_test>.py` |
 | Offline test fixtures (saved API responses, sample JSON) | `tests/fixtures/` |
 | Raw external data dumps (tier lists, etc.) | `data/raw/` |
+| Private real trading decision log | `data/decisions/decision_log.csv` (ignored; do not commit) |
 | Generated/dated snapshots | `data/snapshots/` |
 | Generated merged/final tables | `outputs/` |
 
