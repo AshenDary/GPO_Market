@@ -69,12 +69,20 @@ class DecisionNotFoundError(DecisionLogError):
     """Raised when an update targets a decision id that is not logged."""
 
 
+class DuplicateDecisionIDError(DecisionLogError):
+    """Raised when a decision id appears more than once."""
+
+
 class ResaleAlreadyRecordedError(DecisionLogError):
     """Raised when a resale update would overwrite an existing actual sale."""
 
 
 class ResaleWithoutPurchaseError(DecisionLogError):
     """Raised when a resale update targets a no-buy decision."""
+
+
+class PurchasePriceForNoBuyError(DecisionLogError):
+    """Raised when a no-buy decision includes an actual purchase price."""
 
 
 def latest_gpovalues_snapshot(snapshot_dir: Path = SNAPSHOT_DIR) -> Path:
@@ -105,6 +113,16 @@ def load_snapshot(snapshot_path: Path | None = None, snapshot_dir: Path = SNAPSH
 
 def resolve_snapshot_item(snapshot: pd.DataFrame, item_name: str) -> pd.Series:
     """Resolve one item in a snapshot using the evaluator's matching rules."""
+    key = item_name.lower().strip()
+    exact = snapshot[snapshot["join_key"] == key]
+    if len(exact) > 1:
+        names = ", ".join(str(name) for name in exact["name"].dropna().head(8))
+        raise AmbiguousItemMatchError(
+            f"Multiple exact matches for '{item_name}': {names}. The snapshot has duplicate item keys."
+        )
+    if len(exact) == 1:
+        return exact.iloc[0]
+
     matches = find_item_matches(snapshot, item_name)
     if len(matches) == 1:
         return matches.iloc[0]
@@ -140,6 +158,8 @@ def build_decision_entry(
     """Build one log row from the snapshot available at decision time."""
     if asking_price <= 0:
         raise ValueError("asking_price must be greater than zero.")
+    if not bought and purchase_price is not None:
+        raise PurchasePriceForNoBuyError("purchase_price is only valid for a buy decision.")
     if purchase_price is not None and purchase_price <= 0:
         raise ValueError("purchase_price must be greater than zero when provided.")
 
@@ -189,6 +209,12 @@ def append_decision(entry: dict[str, object], log_path: Path = DECISION_LOG_PATH
     """Append one decision entry to the private CSV log."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     existing = load_decision_log(log_path)
+    decision_id = str(entry.get("decision_id", "")).strip()
+    if not decision_id:
+        raise ValueError("decision_id must be present before appending a decision.")
+    if not existing.empty and (existing["decision_id"].astype(str) == decision_id).any():
+        raise DuplicateDecisionIDError(f"Decision id '{decision_id}' already exists in {log_path}.")
+
     new_row = pd.DataFrame([entry], columns=DECISION_COLUMNS)
     updated = new_row if existing.empty else pd.concat([existing, new_row], ignore_index=True)
     updated.to_csv(log_path, index=False)
@@ -236,7 +262,11 @@ def get_decision(decision_id: str, log_path: Path = DECISION_LOG_PATH) -> pd.Ser
     """Return one logged decision by id."""
     log = load_decision_log(log_path)
     matches = log[log["decision_id"] == decision_id]
-    if len(matches) != 1:
+    if len(matches) > 1:
+        raise DuplicateDecisionIDError(
+            f"Decision id '{decision_id}' appears {len(matches)} times in {log_path}."
+        )
+    if len(matches) == 0:
         raise DecisionNotFoundError(f"No decision found with id '{decision_id}'.")
     return matches.iloc[0]
 
@@ -256,7 +286,11 @@ def record_resale_outcome(
 
     log = load_decision_log(log_path)
     matches = log.index[log["decision_id"] == decision_id].tolist()
-    if len(matches) != 1:
+    if len(matches) > 1:
+        raise DuplicateDecisionIDError(
+            f"Decision id '{decision_id}' appears {len(matches)} times in {log_path}."
+        )
+    if len(matches) == 0:
         raise DecisionNotFoundError(f"No decision found with id '{decision_id}'.")
 
     idx = matches[0]
@@ -273,8 +307,15 @@ def record_resale_outcome(
 
     for column in ("resale_date", "resale_notes"):
         log[column] = log[column].astype("object")
-    actual_date = resale_date or date.today()
-    log.at[idx, "resale_date"] = actual_date.isoformat() if isinstance(actual_date, date) else str(actual_date)
+    actual_date = _parse_resale_date(resale_date)
+    decision_date = _decision_date(log.at[idx, "decision_timestamp"])
+    today = date.today()
+    if actual_date < decision_date:
+        raise ValueError("resale_date cannot be before the original decision date.")
+    if actual_date > today:
+        raise ValueError("resale_date cannot be in the future for an actual completed sale.")
+
+    log.at[idx, "resale_date"] = actual_date.isoformat()
     log.at[idx, "resale_price"] = float(resale_price)
     log.at[idx, "resale_notes"] = resale_notes
     log.to_csv(log_path, index=False)
@@ -312,3 +353,27 @@ def _as_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"true", "1", "yes", "y", "buy", "bought"}
+
+
+def _parse_resale_date(value: date | str | None) -> date:
+    if value is None:
+        return date.today()
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ValueError("resale_date must be a valid ISO date in YYYY-MM-DD format.") from exc
+
+
+def _decision_date(decision_timestamp: object) -> date:
+    timestamp = str(decision_timestamp).strip()
+    if not timestamp:
+        raise ValueError("decision_timestamp is required to validate resale_date.")
+    normalized = timestamp.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized).date()
+    except ValueError as exc:
+        raise ValueError("decision_timestamp must be a valid ISO timestamp.") from exc

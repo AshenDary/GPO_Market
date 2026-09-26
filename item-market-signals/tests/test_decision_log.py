@@ -1,17 +1,25 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from typer.testing import CliRunner
 
+from market_signals.decisions.cli import app
 from market_signals.decisions.log import (
     AmbiguousItemMatchError,
+    DECISION_COLUMNS,
+    DecisionNotFoundError,
+    DuplicateDecisionIDError,
     MissingItemPriceError,
+    PurchasePriceForNoBuyError,
     ResaleAlreadyRecordedError,
     ResaleWithoutPurchaseError,
+    append_decision,
     build_decision_entry,
+    get_decision,
     load_decision_log,
     log_decision,
     record_resale_outcome,
@@ -20,6 +28,7 @@ from market_signals.decisions.log import (
 
 
 FIXED_TIME = datetime(2026, 9, 26, 12, 30, tzinfo=timezone.utc)
+RUNNER = CliRunner()
 
 
 def _write_snapshot(snapshot_dir: Path, snapshot_date: str, rows: list[dict[str, object]]) -> Path:
@@ -99,6 +108,49 @@ def test_logs_no_buy_entry_without_purchase_price(tmp_path: Path) -> None:
     assert pd.isna(saved["resale_price"])
 
 
+def test_rejects_purchase_price_for_no_buy_in_core_function(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "snapshots"
+    _write_snapshot(snapshot_dir, "2026-09-26", [_row("Candy Cane")])
+
+    with pytest.raises(PurchasePriceForNoBuyError):
+        build_decision_entry(
+            "Candy Cane",
+            125.0,
+            False,
+            purchase_price=100.0,
+            snapshot_dir=snapshot_dir,
+            decision_timestamp=FIXED_TIME,
+        )
+
+
+def test_cli_rejects_purchase_price_for_no_buy(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "snapshots"
+    log_path = tmp_path / "decision_log.csv"
+    snapshot_path = _write_snapshot(snapshot_dir, "2026-09-26", [_row("Candy Cane")])
+
+    result = RUNNER.invoke(
+        app,
+        [
+            "log",
+            "Candy Cane",
+            "--asking-price",
+            "125",
+            "--decision",
+            "no-buy",
+            "--purchase-price",
+            "100",
+            "--snapshot-file",
+            str(snapshot_path),
+            "--log-path",
+            str(log_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "purchase_price is only valid for a buy decision" in result.output
+    assert not log_path.exists()
+
+
 def test_ambiguous_item_matches_are_rejected(tmp_path: Path) -> None:
     snapshot_dir = tmp_path / "snapshots"
     _write_snapshot(
@@ -109,6 +161,21 @@ def test_ambiguous_item_matches_are_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(AmbiguousItemMatchError, match="Multiple matches"):
         build_decision_entry("cane", 100.0, False, snapshot_dir=snapshot_dir)
+
+
+def test_duplicate_exact_item_matches_are_rejected(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "snapshots"
+    _write_snapshot(
+        snapshot_dir,
+        "2026-09-26",
+        [
+            _row("Kraken Blade", slug="kraken-blade-a", shortcut="KB-A"),
+            _row("Kraken Blade", slug="kraken-blade-b", shortcut="KB-B"),
+        ],
+    )
+
+    with pytest.raises(AmbiguousItemMatchError, match="Multiple exact matches"):
+        build_decision_entry("Kraken Blade", 100.0, False, snapshot_dir=snapshot_dir)
 
 
 def test_missing_price_fields_are_rejected(tmp_path: Path) -> None:
@@ -142,6 +209,7 @@ def test_records_actual_resale_without_marked_value_fields(tmp_path: Path) -> No
     snapshot_dir = tmp_path / "snapshots"
     log_path = tmp_path / "decision_log.csv"
     _write_snapshot(snapshot_dir, "2026-09-26", [_row("Candy Cane")])
+    decision_time = datetime.combine(date.today(), datetime.min.time(), timezone.utc)
     entry = log_decision(
         "Candy Cane",
         80.0,
@@ -149,22 +217,48 @@ def test_records_actual_resale_without_marked_value_fields(tmp_path: Path) -> No
         purchase_price=80.0,
         snapshot_dir=snapshot_dir,
         log_path=log_path,
-        decision_timestamp=FIXED_TIME,
+        decision_timestamp=decision_time,
     )
 
+    valid_resale_date = date.today().isoformat()
     updated = record_resale_outcome(
         str(entry["decision_id"]),
         120.0,
-        resale_date="2026-10-10",
+        resale_date=valid_resale_date,
         log_path=log_path,
     )
 
-    assert updated["resale_date"] == "2026-10-10"
+    assert updated["resale_date"] == valid_resale_date
     assert updated["resale_price"] == pytest.approx(120.0)
     assert pd.isna(updated["marked_value"])
     assert pd.isna(updated["marked_value_source"])
     with pytest.raises(ResaleAlreadyRecordedError):
         record_resale_outcome(str(entry["decision_id"]), 130.0, log_path=log_path)
+
+
+def test_rejects_invalid_resale_dates(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "snapshots"
+    log_path = tmp_path / "decision_log.csv"
+    _write_snapshot(snapshot_dir, "2026-09-26", [_row("Candy Cane")])
+    decision_time = datetime.combine(date.today(), datetime.min.time(), timezone.utc)
+    entry = log_decision(
+        "Candy Cane",
+        80.0,
+        True,
+        purchase_price=80.0,
+        snapshot_dir=snapshot_dir,
+        log_path=log_path,
+        decision_timestamp=decision_time,
+    )
+
+    invalid_cases = [
+        ("not-a-date", "valid ISO date"),
+        ((decision_time.date() - timedelta(days=1)).isoformat(), "before the original decision date"),
+        ((date.today() + timedelta(days=1)).isoformat(), "in the future"),
+    ]
+    for resale_date, message in invalid_cases:
+        with pytest.raises(ValueError, match=message):
+            record_resale_outcome(str(entry["decision_id"]), 120.0, resale_date=resale_date, log_path=log_path)
 
 
 def test_rejects_resale_for_no_buy_decision(tmp_path: Path) -> None:
@@ -182,3 +276,50 @@ def test_rejects_resale_for_no_buy_decision(tmp_path: Path) -> None:
 
     with pytest.raises(ResaleWithoutPurchaseError):
         record_resale_outcome(str(entry["decision_id"]), 120.0, log_path=log_path)
+
+
+def test_duplicate_decision_id_cannot_be_appended(tmp_path: Path) -> None:
+    log_path = tmp_path / "decision_log.csv"
+    entry = {column: "" for column in DECISION_COLUMNS}
+    entry.update(
+        {
+            "decision_id": "duplicate-id",
+            "decision_timestamp": FIXED_TIME.isoformat(),
+            "asking_price": 95.0,
+            "published_value": 100.0,
+            "ci_low": 90.0,
+            "ci_high": 110.0,
+            "verdict": "FAIR -- asking price is at or below the solved fair value",
+            "bought": True,
+        }
+    )
+
+    append_decision(entry, log_path)
+    with pytest.raises(DuplicateDecisionIDError, match="already exists"):
+        append_decision(entry, log_path)
+
+
+def test_lookup_distinguishes_missing_and_duplicated_decision_ids(tmp_path: Path) -> None:
+    log_path = tmp_path / "decision_log.csv"
+    rows = []
+    for _ in range(2):
+        row = {column: "" for column in DECISION_COLUMNS}
+        row.update(
+            {
+                "decision_id": "duplicated",
+                "decision_timestamp": FIXED_TIME.isoformat(),
+                "asking_price": 95.0,
+                "published_value": 100.0,
+                "ci_low": 90.0,
+                "ci_high": 110.0,
+                "verdict": "FAIR -- asking price is at or below the solved fair value",
+                "bought": True,
+            }
+        )
+        rows.append(row)
+    pd.DataFrame(rows, columns=DECISION_COLUMNS).to_csv(log_path, index=False)
+
+    with pytest.raises(DuplicateDecisionIDError, match="appears 2 times"):
+        get_decision("duplicated", log_path)
+    with pytest.raises(DecisionNotFoundError, match="No decision found"):
+        get_decision("missing", log_path)
